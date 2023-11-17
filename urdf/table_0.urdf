@@ -1,0 +1,19 @@
+<?xml version="1.0" ?>
+<robot name="table.urdf">
+  <link name="baseLink">
+    <visual>
+      <origin rpy="0 0 0" xyz="1.0 0 0"/>
+      <geometry>
+	 	    <box size="0.7 0.7 0.7"/>
+      </geometry>
+       <material name="white">
+        <color rgba="1 1 1 1"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+	 	    <box size="0.7 0.7 0.7"/>
+      </geometry>
+    </collision>
+  </link>
+</robot>
