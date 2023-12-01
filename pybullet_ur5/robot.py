@@ -121,6 +121,7 @@ class RobotBase(object):
             joint_poses = self.pybullet_client.calculateInverseKinematics(self.id, self.eef_id, pos, orn,
                                                        self.arm_lower_limits, self.arm_upper_limits, self.arm_joint_ranges, self.arm_rest_poses,
                                                        maxNumIterations=20)
+            print('move_ee joint_poses: ', joint_poses)
         elif control_method == 'joint':
             assert len(action) == self.arm_num_dofs
             joint_poses = action
