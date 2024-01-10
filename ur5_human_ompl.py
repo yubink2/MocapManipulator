@@ -29,6 +29,7 @@ from tsr import *
 from ConstrainedPlanningCommon import *
 import numpy as np
 from transformation import *
+from tsrchain import *
 
 
 class HumanDemo():
@@ -41,6 +42,10 @@ class HumanDemo():
         self.bc.setGravity(0, -9.8, 0) 
         self.bc.setTimestep = 0.0005
 
+        self.bc_second = BulletClient(connection_mode=p.DIRECT)
+        self.bc_second.setAdditionalSearchPath(pybullet_data.getDataPath())
+        self.bc_second.configureDebugVisualizer(self.bc_second.COV_ENABLE_Y_AXIS_UP, 1)
+
         y2zOrn = self.bc.getQuaternionFromEuler((-1.57, 0, 0))
 
         # load environment
@@ -49,6 +54,7 @@ class HumanDemo():
         table1_id = self.bc.loadURDF("table/table.urdf", (-1.5, 0.0, 1.3), y2zOrn, globalScaling=0.6)  # table
         table2_id = self.bc.loadURDF("table/table.urdf", (1.5, 0.0, 1.3), y2zOrn, globalScaling=0.6)  # table
         block_id = self.bc.loadURDF("cube.urdf", (-1.0, 0.15, 0), y2zOrn, useFixedBase=True, globalScaling=0.45)  # block on robot
+        # block_id = self.bc.loadURDF("cube.urdf", (-1.0, 0.0, 0), y2zOrn, useFixedBase=True, globalScaling=0.45)  # block on robot
 
         # load human
         motionPath = 'data/Greeting.json'
@@ -65,6 +71,7 @@ class HumanDemo():
 
         # load robot
         self.robot = UR5Robotiq85(self.bc, (-1.0, 0.35, 0), (-1.57, 0, 0))
+        # self.robot = UR5Robotiq85(self.bc, (-1.0, 0.2, 0), (-1.57, 0, 0))
         self.robot.load()
         self.robot.reset()
         self.init_robot_configs()
@@ -119,10 +126,6 @@ class HumanDemo():
         return box_id
 
     def demo(self):
-        # start = [0, 0, 0, -1, 0, 1.5, 0]
-        # goal = [0, 1.5, 0, -0.1, 0, 0.2, 0]
-        # start = [0.2, 0, 0, -1, 0, 1.5]
-        # goal = [-1, -0.5, -0.5, -0.1, 0, 0.2]
         start = env.robot.get_q()
         goal = [-1, -1, 1, -2, -1.5, -0.5]
 
@@ -132,65 +135,23 @@ class HumanDemo():
             self.pb_ompl_interface.execute(path)
         return res, path
 
-def pose_to_transform(pos, orn):
-    translation_matrix = np.array([
-        [1, 0, 0, pos[0]],
-        [0, 1, 0, pos[1]],
-        [0, 0, 1, pos[2]],
-        [0, 0, 0, 1]
-    ])
-
-    rotation_matrix = quaternion_matrix(orn)
-
-    transform_matrix = np.dot(translation_matrix, rotation_matrix)
-    return transform_matrix
-
-def transform_to_pose(transform_matrix):
-    pos = transform_matrix[:3, 3]
-    orn = quaternion_from_matrix(transform_matrix[:3, :3])
-    return pos, orn
-
-def define_tsrchain(env):
-    # rotation of arm about its elbow
-    human_pos, human_orn = env.bc.getLinkState(env.humanoid._humanoid, 4)[4:6]   # elbow pose in world frame
-    T0_w = pose_to_transform(human_pos, human_orn)
-    Tw_e = np.eye(4)
-    Tw_e[1][3] = -0.12
-    Bw = np.zeros((6,2))
-    constraint1 = TSR(T0_w = T0_w, Tw_e = Tw_e, Bw = Bw)
-
-    # rotation of eef about grasp pose
-    eef_pos, eef_orn = env.bc.getLinkState(env.robot.id, env.robot.eef_id)[4:6]  # eef pose in world frame
-    pos_up = (human_pos[0], human_pos[1]+0.13, human_pos[2])
-    T0_w = pose_to_transform(pos_up, env.bc.getQuaternionFromEuler([-1.57, 0.15, -1.57])) 
-    # T0_w = pose_to_transform(pos_up, human_orn) 
-    T0_e = pose_to_transform(eef_pos, eef_orn)
-    Tw_e = np.linalg.inv(T0_w) @ T0_e  # desire pose of eef relative to grasp
-    T0_w = np.eye(4)
-    Bw = np.zeros((6,2))
-    # Bw[4][:] = [-2.5, -0.4]
-    # Bw[3][:] = [0.2, 2.5]
-    # Bw[4][:] = [0.4, 2.5]
-    Bw[5][:] = [1.0, 2.5]
-    constraint2 = TSR(T0_w = T0_w, Tw_e = Tw_e, Bw = Bw)
-
-    # constraint applied over the whole trajectory
-    tsrchain = TSRChain(sample_start=False, sample_goal=False, constrain=True, 
-                                      TSRs = [constraint1, constraint2])
-    return tsrchain
-
 if __name__ == '__main__':
     env = HumanDemo()
 
     tsrchain = define_tsrchain(env)
-    # for _ in range (10):
-    #     print(tsrchain.sample())  # sample pose of the end-effector
-    sample = tsrchain.sample()
+    sample = tsrchain.sample()  # sample pose of the end-effector
     pos, orn = transform_to_pose(sample)
     print(sample)
     print(pos, orn)
-    print(np.concatenate((pos, orn)))
-    time.sleep(8)
+
+    virtualManipId = define_virtual_manip(env)
+
+    for i in range(env.bc_second.getNumJoints(virtualManipId)):
+        print(env.bc_second.getJointInfo(virtualManipId, i))
+    
+    print('* ', env.bc.getLinkState(env.humanoid._humanoid, 3)[4:6])
+    print('* ', env.bc.getLinkState(env.humanoid._humanoid, 4)[4:6])
+    print('* ', env.bc.getLinkState(env.humanoid._humanoid, 5)[4:6])
 
     while (True):
         env.bc.configureDebugVisualizer(p.COV_ENABLE_SINGLE_STEP_RENDERING)
@@ -202,4 +163,3 @@ if __name__ == '__main__':
 
 
 
-# elbow range: [0.401146, 2.541233]

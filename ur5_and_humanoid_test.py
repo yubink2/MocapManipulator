@@ -76,14 +76,14 @@ loop = 'wrap'
 
 
 # bc: main simulation
-# bc_second: simulation (w/o visualization) to move human model on the side
 bc = BulletClient(connection_mode=p.GUI)
 bc.setAdditionalSearchPath(pybullet_data.getDataPath())
 bc.configureDebugVisualizer(bc.COV_ENABLE_Y_AXIS_UP, 1)
 bc.setGravity(0, -9.8, 0) 
 
+# bc_second: simulation (w/o visualization) to move human model on the side
 bc_second = BulletClient(connection_mode=p.DIRECT)
-# bc_second.configureDebugVisualizer(bc.COV_ENABLE_Y_AXIS_UP, 1)     I THINK I NEED THIS?????? TEST!!!
+bc_second.configureDebugVisualizer(bc.COV_ENABLE_Y_AXIS_UP, 1)
 bc_second.setAdditionalSearchPath(pybullet_data.getDataPath())
 
 
