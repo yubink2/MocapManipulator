@@ -1,38 +1,25 @@
 import os, inspect
-
+import os.path as osp
+import pybullet as p
+import math
+import time
+import sys
+sys.path.append("/usr/lib/python3/dist-packages")
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(os.path.dirname(currentdir))
 os.sys.path.insert(0, parentdir)
 
-import numpy as np
-import pybullet as p
+# robot
+sys.path.append("/home/exx/Yubin/deep_mimic")
+sys.path.append("/home/exx/Yubin/deep_mimic/mocap")
 import pybullet_data
-
-from tqdm import tqdm
-from pybullet_ur5.robot import Panda, UR5Robotiq85, UR5Robotiq140
-from pybullet_ur5.utilities import YCBModels, Camera
-import time
-import math
-import numpy as np
-
+from pybullet_ur5.robot import UR5Robotiq85
 from pybullet_utils.bullet_client import BulletClient
-from deep_mimic.env.motion_capture_data import MotionCaptureData
 
+# humanoid
+from env.motion_capture_data import MotionCaptureData
 from humanoid import Humanoid
 from humanoid import HumanoidPose
-
-from deepmimic_json_generator import *
-from transformation import *
-
-
-import sys
-# sys.path
-# ['', '/home/exx/anaconda3/envs/py37-ompl-test/lib/python37.zip', '/home/exx/anaconda3/envs/py37-ompl-test/lib/python3.7', '/home/exx/anaconda3/envs/py37-ompl-test/lib/python3.7/lib-dynload', '/home/exx/anaconda3/envs/py37-ompl-test/lib/python3.7/site-packages']
-sys.path.append("/usr/lib/python3/dist-packages")
-import ompl
-# '/usr/lib/python3/dist-packages/ompl/__init__.py'
-sys.path.append("/usr/lib/python3/dist-packages")
-
 
 
 def Reset(humanoid):
@@ -43,33 +30,9 @@ def Reset(humanoid):
   pose = humanoid.InitializePoseFromMotionData()
   humanoid.ApplyPose(pose, True, True, humanoid._humanoid, bc)
 
-def euler_angles_from_vector(position, center):
-    if center[0] > position[0]:
-        x,y,z = center-position
-    else:
-        x,y,z = position-center
-        
-    length = math.sqrt(x**2 + y**2 + z**2)
-    pitch = math.acos(z/length)
-    yaw = math.atan(y/x)
-    roll = math.pi if position[0] > center[0] else 0
-
-    euler_angles = [roll,pitch,yaw]
-    return euler_angles
-
-def human_motion_from_frame_data(humanoid, utNum, bc_arg):
-  # print('bc: ', bc)
-  keyFrameDuration = motion.KeyFrameDuraction()
-  bc_arg.stepSimulation()
-  humanoid.RenderReference(utNum * keyFrameDuration)  # RenderReference calls Slerp() & ApplyPose()
-
-def human_motion_from_frame_data_without_applypose(humanoid, utNum, bc_arg):
-  keyFrameDuration = motion.KeyFrameDuraction()
-  bc_arg.stepSimulation()
-  pose = humanoid.RenderReferenceWithoutApplyPose(utNum * keyFrameDuration)
-  print('--human_zmotion_from_frame_data_without_applypose: ', pose._rightShoulderRot)
-  print('--human_zmotion_from_frame_data_without_applypose: ', pose._rightElbowRot)
-
+def draw_sphere_marker(bc, position, radius, color):
+  vs_id = bc.createVisualShape(p.GEOM_SPHERE, radius=radius, rgbaColor=color)
+  marker_id = bc.createMultiBody(basePosition=position, baseCollisionShapeIndex=-1, baseVisualShapeIndex=vs_id)
 
 dataset_path = 'data/data_3d_h36m.npz'
 motionPath = 'data/Sitting1.json'
@@ -79,15 +42,9 @@ action = 'Sitting1'
 fps = 24
 loop = 'wrap'
 
-# dataset = init_fb_h36m_dataset(dataset_path)
-# ground_truth = pose3D_from_fb_h36m(dataset, subject=subject, action=action, shift=[1.0, 0.0, 0.0])
-# rot_seq = coord_seq_to_rot_seq(coord_seq=ground_truth, frame_duration=1 / fps)
-# rot_seq_to_deepmimic_json(rot_seq=rot_seq, loop=loop, json_path=json_path)
 
-
+# load environment
 bc = BulletClient(connection_mode=p.GUI)
-
-# bc.configureDebugVisualizer(p.COV_ENABLE_GUI,0)
 bc.setAdditionalSearchPath(pybullet_data.getDataPath())
 bc.configureDebugVisualizer(bc.COV_ENABLE_Y_AXIS_UP, 1)
 bc.setGravity(0, -9.8, 0) 
@@ -97,13 +54,19 @@ planeID = bc.loadURDF("plane.urdf", (0, -0.04, 0), y2zOrn)  # ground floor
 bedID = bc.loadURDF("./urdf/bed_0.urdf", (0.0, 0.0, 0.0), y2zOrn, useFixedBase=True, globalScaling=1.2)  # bed
 table1ID = bc.loadURDF("table/table.urdf", (-1.5, 0.0, 1.6), y2zOrn, globalScaling=0.6)  # table
 table2ID = bc.loadURDF("table/table.urdf", (1.5, 0.0, 1.6), y2zOrn, globalScaling=0.6)  # table
-# blockID = bc.loadURDF("cube.urdf", (-0.9, 0.2, 0), y2zOrn, useFixedBase=True, globalScaling=0.5)  # block on robot
+block_id = bc.loadURDF("cube.urdf", (-1.0, 0.15, 0), y2zOrn, useFixedBase=True, globalScaling=0.45)
 
-# robot = UR5Robotiq85(bc, (-0.9, 0.15, 0.7), (-1.57, 0, 0))
-# robot.load()
-# robot.reset()
+# load robot
+robot = UR5Robotiq85(bc, (-1.0, 0.35, 0), (-1.57, 0, 0))
+robot.load()
+robot.reset()
 
+# load humanoid
+motion = MotionCaptureData()
+motion.Load(motionPath)
+humanoid = Humanoid(bc, motion, [0, 0.3, 0])
 
+# # debug parameters
 # position_control_group = []
 # position_control_group.append(p.addUserDebugParameter('x', -1.0, 1.0, -0.807))
 # position_control_group.append(p.addUserDebugParameter('y', 0.5, 1.5, 0.878))
@@ -113,28 +76,64 @@ table2ID = bc.loadURDF("table/table.urdf", (1.5, 0.0, 1.6), y2zOrn, globalScalin
 # position_control_group.append(p.addUserDebugParameter('yaw', -3.14, 3.14, 3.14))
 # position_control_group.append(p.addUserDebugParameter('gripper_opening', 0, 0.085, 0.08))
 
+# print robot info
+for joint in robot.arm_controllable_joints:
+  print(joint, bc.getJointInfo(robot.id, joint))
+  print(joint, bc.getLinkState(robot.id, joint))
 
-motion = MotionCaptureData()
-motion.Load(motionPath)
+# visualize control points
+shoulder_link = bc.getLinkState(robot.id, 1)[:2]
+upper_arm_link = bc.getLinkState(robot.id, 2)[:2]
+forearm_link = bc.getLinkState(robot.id, 3)[:2]
+wrist_1_link = bc.getLinkState(robot.id, 4)[:2]
+wrist_2_link = bc.getLinkState(robot.id, 5)[:2]
+wrist_3_link = bc.getLinkState(robot.id, 6)[:2]
 
-humanoid = Humanoid(bc, motion, [0, 0.3, 0])
-# human_motion_from_frame_data(humanoid, 60, bc)
-# human_motion_from_frame_data_without_applypose(humanoid, 60, bc)
-# time.sleep(1)
-# print('getJointStateMultiDof: ', bc.getJointStateMultiDof(humanoid._humanoid, 3))
-# print('getJointStateMultiDof: ', bc.getJointStateMultiDof(humanoid._humanoid, 4))
+shoulder_control_points = [[0,0,0.055], [0,0,-0.055], [-0.055,0,0]]
+upper_arm_control_points = [[0,0,0.055], [0,0,-0.055], [0.055,0,0], [-0.055,0,0]]
+forearm_control_points = [[-0.012,0,-0.095], [0.012,0,-0.095]]
+wrist_1_control_points = [[0,0,0.04055], [-0.045,0.02223,0], [-0.0275,0.055,0]]
+wrist_2_control_points = [[0,0.058,0.02067], [0,-0.0172,-0.05], [0.04,-0.0172,0]]
+wrist_3_control_points = [[-0.00458,0.0489,0], [-0.04783,0,0], [0,-0.025,0.05], [0.00525,0,0.05628], [0.04535,0.03517,0], [0.053164,0.0171,0]]
 
+print(len(shoulder_control_points)+len(upper_arm_control_points)+len(forearm_control_points)+len(wrist_1_control_points)+len(wrist_2_control_points)+len(wrist_3_control_points))
 
-# pos, human_orn = bc.getLinkState(humanoid._humanoid, 4)[:2]  
-# orn = bc.getQuaternionFromEuler([-1.57, 0, -1.57])   # NEED TO FIX THIS FOR DIFF INIT CONFIGS
-# orn = bc.getEulerFromQuaternion(human_orn)
-# print('eef orn: ', math.degrees(-1.57), math.degrees(0), math.degrees(-1.57))
-# print('human orn: ', human_orn, " , ", math.degrees(orn[0]), math.degrees(orn[1]), math.degrees(orn[2]))
-# print('orn: ', orn, " , ", math.degrees(bc.getEulerFromQuaternion(orn)))
+# draw_sphere_marker(bc, shoulder_link[0], radius=0.06, color=[1, 0, 0, 1])
+# draw_sphere_marker(bc, upper_arm_link[0], radius=0.06, color=[0, 1, 0, 1])
+# draw_sphere_marker(bc, forearm_link[0], radius=0.06, color=[0, 0, 1, 1])
+# draw_sphere_marker(bc, wrist_1_link[0], radius=0.06, color=[1, 0, 0, 1])
+# draw_sphere_marker(bc, wrist_2_link[0], radius=0.06, color=[0, 1, 0, 1])
+draw_sphere_marker(bc, wrist_3_link[0], radius=0.06, color=[0, 0, 1, 1])
 
+# for control_point in shoulder_link:
+#   pos = [shoulder_link[0][0]+control_point[0], shoulder_link[0][1]+control_point[1], shoulder_link[0][2]+control_point[2]]
+#   draw_sphere_marker(bc, pos, radius=0.03, color=[0, 1, 0, 1])
+
+# for control_point in upper_arm_link:
+#   pos = [upper_arm_link[0][0]+control_point[0], upper_arm_link[0][1]+control_point[1], upper_arm_link[0][2]+control_point[2]]
+#   draw_sphere_marker(bc, pos, radius=0.03, color=[0, 0, 1, 1])
+
+# for control_point in forearm_control_points:
+#   pos = [forearm_link[0][0]+control_point[0], forearm_link[0][1]+control_point[1], forearm_link[0][2]+control_point[2]]
+#   draw_sphere_marker(bc, pos, radius=0.03, color=[1, 0, 0, 1])
+
+# for control_point in wrist_1_control_points:
+#   pos = [wrist_1_link[0][0]+control_point[0], wrist_1_link[0][1]+control_point[1], wrist_1_link[0][2]+control_point[2]]
+#   draw_sphere_marker(bc, pos, radius=0.03, color=[1, 0, 0, 1])
+
+# for control_point in wrist_2_control_points:
+#   pos = [wrist_2_link[0][0]+control_point[0], wrist_2_link[0][1]+control_point[1], wrist_2_link[0][2]+control_point[2]]
+#   draw_sphere_marker(bc, pos, radius=0.03, color=[1, 0, 0, 1])
+
+for control_point in wrist_3_control_points:
+  pos = [wrist_3_link[0][0]+control_point[0], wrist_3_link[0][1]+control_point[1], wrist_3_link[0][2]+control_point[2]]
+  draw_sphere_marker(bc, pos, radius=0.03, color=[1, 0, 0, 1])
 
 while True:
   p.configureDebugVisualizer(p.COV_ENABLE_SINGLE_STEP_RENDERING) 
+
+  # bc.setJointMotorControl2(robot.id, 1, p.POSITION_CONTROL, 1.0)
+  robot.reset()
 
   # parameter = []
   # for i in range(len(position_control_group)):
@@ -142,16 +141,6 @@ while True:
 
   # robot.move_ee(action=parameter[:-1], control_method='end')
   # robot.move_gripper(parameter[-1])
-
-  bc.setJointMotorControlMultiDof(humanoid._humanoid,
-                                  3,
-                                  p.POSITION_CONTROL,
-                                  # targetPosition=bc.getEulerFromQuaternion([-0.10111399739980698, 0.8756160140037537, -0.3728660047054291, 0.28990399837493896]))
-                                  targetPosition=[-0.10111399739980698, 0.8756160140037537, -0.3728660047054291, 0.28990399837493896])
-  bc.setJointMotorControlMultiDof(humanoid._humanoid,
-                                  4,
-                                  p.POSITION_CONTROL,
-                                  targetPosition=[1.05714])
 
   p.stepSimulation()
 

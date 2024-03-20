@@ -121,11 +121,12 @@ class RobotBase(object):
             joint_poses = self.pybullet_client.calculateInverseKinematics(self.id, self.eef_id, pos, orn,
                                                        self.arm_lower_limits, self.arm_upper_limits, self.arm_joint_ranges, self.arm_rest_poses,
                                                        maxNumIterations=20)
-            print('move_ee joint_poses: ', joint_poses)
         elif control_method == 'joint':
             assert len(action) == self.arm_num_dofs
             joint_poses = action
         # arm
+        print('move_ee', joint_poses)
+        print('move_ee', [joint_poses[i] for i in self.arm_controllable_joints])
         for i, joint_id in enumerate(self.arm_controllable_joints):
             self.pybullet_client.setJointMotorControl2(self.id, joint_id, p.POSITION_CONTROL, joint_poses[i],
                                     force=self.joints[joint_id].maxForce, maxVelocity=self.joints[joint_id].maxVelocity)

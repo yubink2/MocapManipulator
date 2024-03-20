@@ -105,7 +105,7 @@ motion = MotionCaptureData()
 motion.Load(motionPath)
 
 humanoid = Humanoid(bc, motion, [0, 0.3, 0])
-human_motion_from_frame_data(humanoid, 60, bc)
+# human_motion_from_frame_data(humanoid, 60, bc)
 
 
 print('jointInfo ', bc.getJointInfo(humanoid._humanoid, 3))
@@ -120,50 +120,68 @@ print('linkState ', bc.getLinkState(humanoid._humanoid, 3))
 print(bc.getLinkState(humanoid._humanoid, 4))
 print(bc.getLinkState(humanoid._humanoid, 5))
 
-shoulder_to_world = bc.getLinkState(humanoid._humanoid, 3)[4:6]   
-elbow_to_world = bc.getLinkState(humanoid._humanoid, 4)[4:6]  
-elbow_center_to_world = bc.getLinkState(humanoid._humanoid, 4)[:2]   
-wrist_to_world = bc.getLinkState(humanoid._humanoid, 5)[4:6]   
 
-world_to_shoulder = bc.invertTransform(shoulder_to_world[0], shoulder_to_world[1])
-elbow_to_shoulder = bc.multiplyTransforms(elbow_to_world[0], elbow_to_world[1],
-                                    world_to_shoulder[0], world_to_shoulder[1])
-elbow_to_shoulder = bc.invertTransform(elbow_to_shoulder[0], elbow_to_shoulder[1])
-# elbow_to_shoulder = bc.getJointInfo(humanoid._humanoid, 4)[14:16]
-# wrist_to_elbow = bc.getJointInfo(humanoid._humanoid, 5)[14:16]
+# elbow_to_world = bc.getLinkState(humanoid._humanoid, 4)[4:6]  
+# elbow_center_to_world = bc.getLinkState(humanoid._humanoid, 4)[:2]   
+# wrist_to_world = bc.getLinkState(humanoid._humanoid, 5)[4:6]   
 
+# world_to_shoulder = bc.invertTransform(shoulder_to_world[0], shoulder_to_world[1])
+# elbow_to_shoulder = bc.multiplyTransforms(elbow_to_world[0], elbow_to_world[1],
+#                                     world_to_shoulder[0], world_to_shoulder[1])
+# elbow_to_shoulder = bc.invertTransform(elbow_to_shoulder[0], elbow_to_shoulder[1])
+
+shoulder_to_world = bc.getLinkState(humanoid._humanoid, 3)[4:6]
+shoulder_to_world_inertial = bc.getLinkState(humanoid._humanoid, 3)[2:4] 
+
+elbow_to_world = bc.getLinkState(humanoid._humanoid, 4)[4:6]
+elbow_to_world_inertial = bc.getLinkState(humanoid._humanoid, 4)[2:4] 
+
+elbow_to_shoulder = bc.getJointInfo(humanoid._humanoid, 4)[14:16]
+wrist_to_elbow = bc.getJointInfo(humanoid._humanoid, 5)[14:16]
+
+# print('shoulder_to_world', shoulder_to_world)
+# print('shoulder_to_world_inertial', shoulder_to_world_inertial)
+# print('shoulder_to_world', shoulder_to_world)
+# print('shoulder_to_world', shoulder_to_world)
+
+elbow_to_shoulder = bc.multiplyTransforms(shoulder_to_world_inertial[0], shoulder_to_world_inertial[1],
+                                          elbow_to_shoulder[0], elbow_to_shoulder[1])
+# wrist_to_elbow = bc.multiplyTransforms(elbow_to_world_inertial[0], elbow_to_world_inertial[1],
+#                                           wrist_to_elbow[0], wrist_to_elbow[1])
+print('elbow_to_shoulder', elbow_to_shoulder)
+print('wrist_to_elbow', wrist_to_elbow)
 
 sphereRadius = 0.06
 sphere_base = bc.createVisualShape(p.GEOM_SPHERE, radius=sphereRadius)
 sphere = bc.createVisualShape(p.GEOM_SPHERE, radius=sphereRadius)
-mass = 0
-
-basePosition = shoulder_to_world[0]
-# baseOrientation = shoulder_to_world[1]
-baseOrientation = [0, 0, 0, 1]
-link_Masses = [0]
-linkCollisionShapeIndices = [-1]
-linkVisualShapeIndices = [sphere]
-linkPositions = [[0, -0.26, 0]]
-linkOrientations = [[0, 0, 0, 1]]
-linkInertialFramePositions = [[0, 0, 0]]
-linkInertialFrameOrientations = [[0, 0, 0, 1]]
-indices = [0]
-jointTypes = [p.JOINT_SPHERICAL]
-axis = [[0, 0, 1]]
+sphere_col = bc.createCollisionShape(p.GEOM_SPHERE, radius=sphereRadius)
+mass = 1
 
 # basePosition = shoulder_to_world[0]
 # baseOrientation = shoulder_to_world[1]
-# link_Masses = [0, 0]
-# linkCollisionShapeIndices = [-1, -1]
-# linkVisualShapeIndices = [sphere, sphere]
-# linkPositions = [[0, -0.26, 0], [0, -0.12, 0]]
-# linkOrientations = [[0, 0, 0, 1], [0, 0, 0, 1]]
-# linkInertialFramePositions = [[0, 0, 0], [0, 0, 0]]
-# linkInertialFrameOrientations = [[0, 0, 0, 1], [0, 0, 0, 1]]
-# indices = [0, 1]
-# jointTypes = [p.JOINT_REVOLUTE, p.JOINT_REVOLUTE]
-# axis = [[0, 0, 1], [0, 0, 1]]
+# link_Masses = [0]
+# linkCollisionShapeIndices = [-1]
+# linkVisualShapeIndices = [sphere]
+# linkPositions = [elbow_to_shoulder[0]]
+# linkOrientations = [elbow_to_shoulder[1]]
+# linkInertialFramePositions = [[0, 0, 0]]
+# linkInertialFrameOrientations = [[0, 0, 0, 1]]
+# indices = [0]
+# jointTypes = [p.JOINT_REVOLUTE]
+# axis = [[1, 1, 1]]
+
+basePosition = shoulder_to_world[0]
+baseOrientation = shoulder_to_world[1]
+link_Masses = [1, 1]
+linkCollisionShapeIndices = [-1, -1]
+linkVisualShapeIndices = [sphere, sphere]
+linkPositions = [elbow_to_shoulder[0], wrist_to_elbow[0]]
+linkOrientations = [elbow_to_shoulder[1], wrist_to_elbow[1]]
+linkInertialFramePositions = [[0, 0, 0], [0, 0, 0]]
+linkInertialFrameOrientations = [[0, 0, 0, 1], [0, 0, 0, 1]]
+indices = [0, 1]
+jointTypes = [p.JOINT_REVOLUTE, p.JOINT_REVOLUTE]
+axis = [[0, 0, 1], [0, 0, 1]]
 
 # sphereUid = bc.createMultiBody(mass,
 #                               -1,
@@ -171,45 +189,62 @@ axis = [[0, 0, 1]]
 #                               basePosition,
 #                               baseOrientation)
 
-sphereUid = bc.createMultiBody(mass,
-                              -1,
-                              sphere_base,
-                              basePosition,
-                              baseOrientation,
-                              linkMasses=link_Masses,
-                              linkCollisionShapeIndices=linkCollisionShapeIndices,
-                              linkVisualShapeIndices=linkVisualShapeIndices,
-                              linkPositions=linkPositions,
-                              linkOrientations=linkOrientations,
-                              linkInertialFramePositions=linkInertialFramePositions,
-                              linkInertialFrameOrientations=linkInertialFrameOrientations,
-                              linkParentIndices=indices,
-                              linkJointTypes=jointTypes,
-                              linkJointAxis=axis)
+# sphereUid = bc.createMultiBody(mass,
+#                               -1,
+#                               sphere,
+#                               basePosition,
+#                               baseOrientation,
+#                               linkMasses=link_Masses,
+#                               linkCollisionShapeIndices=linkCollisionShapeIndices,
+#                               linkVisualShapeIndices=linkVisualShapeIndices,
+#                               linkPositions=linkPositions,
+#                               linkOrientations=linkOrientations,
+#                               linkInertialFramePositions=linkInertialFramePositions,
+#                               linkInertialFrameOrientations=linkInertialFrameOrientations,
+#                               linkParentIndices=indices,
+#                               linkJointTypes=jointTypes,
+#                               linkJointAxis=axis)
 
 
-for i in range(bc.getNumJoints(sphereUid)):
-  print('**', i, bc.getJointState(sphereUid, i))
-  print('**', i, bc.getJointInfo(sphereUid, i))
+# print('base: ', basePosition, baseOrientation)
+# print('link: ', linkPositions)
+# print('link: ', linkOrientations)
 
-shoulder_joint = bc.getJointStateMultiDof(humanoid._humanoid, 3)[0]
-shoulder_joint = bc.getEulerFromQuaternion(shoulder_joint)
-elbow_joint = bc.getJointState(humanoid._humanoid, 4)[0]
-print(shoulder_joint, elbow_joint)
+# for i in range(bc.getNumJoints(sphereUid)):
+#   print('*', bc.getJointInfo(sphereUid, i)[14:16])
 
-p.setJointMotorControlMultiDof(sphereUid, 0, p.POSITION_CONTROL, targetPosition=shoulder_joint)
-# p.setJointMotorControl2(sphereUid, 1, p.POSITION_CONTROL, targetPosition=wrist_joint)
+# shoulder_joint = bc.getJointStateMultiDof(humanoid._humanoid, 3)[0]
+# shoulder_joint = bc.getEulerFromQuaternion(shoulder_joint)
+# elbow_joint = bc.getJointState(humanoid._humanoid, 4)[0]
+# print(shoulder_joint, elbow_joint)
 
+# p.setJointMotorControlMultiDof(sphereUid, 0, p.POSITION_CONTROL, targetPosition=shoulder_joint)
+
+# for i in range(bc.getNumJoints(sphereUid)):
+#   print('**', bc.getJointInfo(sphereUid, i)[14:16])
+
+desired_eef_to_world_pos = bc.getLinkState(humanoid._humanoid, 4)[0]
+desired_eef_to_world_pos = [desired_eef_to_world_pos[0], desired_eef_to_world_pos[1]+0.13, desired_eef_to_world_pos[2]]
+elbow_to_world = bc.getLinkState(humanoid._humanoid, 4)[4:6]
+cp_to_elbow = bc.getJointInfo(humanoid._humanoid, 5)[14:16]
+cp_to_world = bc.multiplyTransforms(cp_to_elbow[0], cp_to_elbow[1],
+                                    elbow_to_world[0], elbow_to_world[1])
+cp_to_world = bc.getLinkState(humanoid._humanoid, 4)[:2]
+
+print('desired_eef_to_world_pos: ', desired_eef_to_world_pos)
+print('cp_to_world: ', cp_to_world)
 
 while True:
   bc.configureDebugVisualizer(p.COV_ENABLE_SINGLE_STEP_RENDERING) 
 
-  # bc.addUserDebugLine(elbow_to_world[0], elbow_center_to_world[0], [1, 0, 0], 5.0)
+  # bc.addUserDebugLine(elbow_to_world[0], cp_to_world[0], [1, 0, 0], 5.0)
+  bc.addUserDebugLine(cp_to_world[0], desired_eef_to_world_pos, [1, 0, 0], 5.0)
+  
+  # bc.setJointMotorControl2(sphereUid, 1, p.POSITION_CONTROL, targetPosition=0.5, force=1000,maxVelocity=3)
 
   bc.stepSimulation()
 
 
 Reset(humanoid)
 p.disconnect()
-
 

@@ -160,7 +160,6 @@ class HumanoidPose(object):
                                                               rightShoulderRotEnd, frameFraction)
     self._rightShoulderVel = self.ComputeAngVel(rightShoulderRotStart, rightShoulderRotEnd,
                                                 keyFrameDuration, bullet_client)
-    print('rightShoulderRot: ', self._rightShoulderRot)
     # self._rightShoulderRot = [0, 1, 0, 0]
     # self._rightShoulderVel = [0, 0, 0]
 
@@ -256,29 +255,13 @@ class Humanoid(object):
     
     # useFixedBase=False if want to enable base motion (e.g., walking forward) 
 
-    # self._humanoid = self._pybullet_client.loadURDF("humanoid/humanoid.urdf", [0, 0.9, 0],
-    #                                                 globalScaling=0.25,
-    #                                                 useFixedBase=True)
-
-    # self._kinematicHumanoid = self.kin_client.loadURDF("humanoid/humanoid.urdf", [0, 0.9, 0],
-    #                                                    globalScaling=0.25,
-    #                                                    useFixedBase=True)
-
-    self._humanoid = self._pybullet_client.loadURDF("urdf/humanoid.urdf", [0, 0.9, 0],
+    self._humanoid = self._pybullet_client.loadURDF("urdf/humanoid_with_rev.urdf", [0, 0.9, 0],
                                                     globalScaling=0.25,
                                                     useFixedBase=True)
 
-    self._kinematicHumanoid = self.kin_client.loadURDF("urdf/humanoid.urdf", [0, 0.9, 0],
+    self._kinematicHumanoid = self.kin_client.loadURDF("urdf/humanoid_with_rev.urdf", [0, 0.9, 0],
                                                        globalScaling=0.25,
                                                        useFixedBase=True)
-
-    # self._humanoid = self._pybullet_client.loadURDF("urdf/humanoid_with_rev.urdf", [0, 0.9, 0],
-    #                                                 globalScaling=0.25,
-    #                                                 useFixedBase=True)
-
-    # self._kinematicHumanoid = self.kin_client.loadURDF("urdf/humanoid_with_rev.urdf", [0, 0.9, 0],
-    #                                                    globalScaling=0.25,
-    #                                                    useFixedBase=True)
 
     pose = HumanoidPose()
 
@@ -430,75 +413,6 @@ class Humanoid(object):
     pose.Slerp(self._frameFraction, frameData, frameDataNext, self._pybullet_client)
     return pose
 
-  def ApplyAction(self, action):
-    #turn action into pose
-    pose = HumanoidPose()
-    pose.Reset()
-    index = 0
-    angle = action[index]
-    axis = [action[index + 1], action[index + 2], action[index + 3]]
-    index += 4
-    pose._chestRot = self._pybullet_client.getQuaternionFromAxisAngle(axis, angle)
-    # print("pose._chestRot ",pose._chestRot.shape, " : ", pose._chestRot)
-
-    angle = action[index]
-    axis = [action[index + 1], action[index + 2], action[index + 3]]
-    index += 4
-    pose._neckRot = self._pybullet_client.getQuaternionFromAxisAngle(axis, angle)
-
-    angle = action[index]
-    axis = [action[index + 1], action[index + 2], action[index + 3]]
-    index += 4
-    pose._rightHipRot = self._pybullet_client.getQuaternionFromAxisAngle(axis, angle)
-
-    angle = action[index]
-    index += 1
-    pose._rightKneeRot = [angle]
-
-    angle = action[index]
-    axis = [action[index + 1], action[index + 2], action[index + 3]]
-    index += 4
-    pose._rightAnkleRot = self._pybullet_client.getQuaternionFromAxisAngle(axis, angle)
-
-    angle = action[index]
-    axis = [action[index + 1], action[index + 2], action[index + 3]]
-    index += 4
-    pose._rightShoulderRot = self._pybullet_client.getQuaternionFromAxisAngle(axis, angle)
-
-    angle = action[index]
-    index += 1
-    pose._rightElbowRot = [angle]
-
-    angle = action[index]
-    axis = [action[index + 1], action[index + 2], action[index + 3]]
-    index += 4
-    pose._leftHipRot = self._pybullet_client.getQuaternionFromAxisAngle(axis, angle)
-
-    angle = action[index]
-    index += 1
-    pose._leftKneeRot = [angle]
-
-    angle = action[index]
-    axis = [action[index + 1], action[index + 2], action[index + 3]]
-    index += 4
-    pose._leftAnkleRot = self._pybullet_client.getQuaternionFromAxisAngle(axis, angle)
-
-    angle = action[index]
-    axis = [action[index + 1], action[index + 2], action[index + 3]]
-    index += 4
-    pose._leftShoulderRot = self._pybullet_client.getQuaternionFromAxisAngle(axis, angle)
-
-    angle = action[index]
-    index += 1
-    pose._leftElbowRot = [angle]
-
-    #print("index=",index)
-
-    initializeBase = False
-    initializeVelocities = False
-    self.ApplyPose(pose, initializeBase, initializeVelocities, self._humanoid,
-                   self._pybullet_client)
-
   def ApplyPose(self, pose, initializeBase, initializeVelocities, humanoid, bc):
     #todo: get tunable parametes from a json file or from URDF (kd, maxForce)
     if (initializeBase):
@@ -516,123 +430,93 @@ class Humanoid(object):
     else:
       bc.changeVisualShape(humanoid, 2, rgbaColor=[1, 1, 1, 1])
 
+    # kp = 0.03
+    # # chest = 1
+    # # neck = 2
+    # rightShoulder = 3
+    # rightElbow = 4
+    # # leftShoulder = 6
+    # # leftElbow = 7
+    # # rightHip = 9
+    # # rightKnee = 10
+    # # rightAnkle = 11
+    # # leftHip = 12
+    # # leftKnee = 13
+    # # leftAnkle = 14
+    # controlMode = bc.POSITION_CONTROL
+
+    # kp = 0.03
+    # right_shoulder_r = 3
+    # right_shoulder_p = 4
+    # right_shoulder_y = 5
+    # right_elbow = 7
+    # controlMode = bc.POSITION_CONTROL
+
     kp = 0.03
-    chest = 1
-    neck = 2
-    rightShoulder = 3
-    rightElbow = 4
-    leftShoulder = 6
-    leftElbow = 7
-    rightHip = 9
-    rightKnee = 10
-    rightAnkle = 11
-    leftHip = 12
-    leftKnee = 13
-    leftAnkle = 14
+    right_shoulder_y = 3
+    right_shoulder_p = 4
+    right_shoulder_r = 5
+    right_elbow = 7
     controlMode = bc.POSITION_CONTROL
+
+    right_shoulder_rpy = bc.getEulerFromQuaternion(pose._rightShoulderRot)
+    print(pose._rightShoulderRot)
+    print(pose._rightShoulderVel)
+    print(pose._rightElbowRot)
+    print(right_shoulder_rpy)
+    print(right_shoulder_rpy[0])
+    print(right_shoulder_rpy[1])
+    print(right_shoulder_rpy[2])
+    
 
     if (initializeBase):
       if initializeVelocities:
-        bc.resetJointStateMultiDof(humanoid, chest, pose._chestRot, pose._chestVel)
-        bc.resetJointStateMultiDof(humanoid, neck, pose._neckRot, pose._neckVel)
-        bc.resetJointStateMultiDof(humanoid, rightHip, pose._rightHipRot, pose._rightHipVel)
-        bc.resetJointStateMultiDof(humanoid, rightKnee, pose._rightKneeRot, pose._rightKneeVel)
-        bc.resetJointStateMultiDof(humanoid, rightAnkle, pose._rightAnkleRot, pose._rightAnkleVel)
-        bc.resetJointStateMultiDof(humanoid, rightShoulder, pose._rightShoulderRot,
-                                   pose._rightShoulderVel)
-        bc.resetJointStateMultiDof(humanoid, rightElbow, pose._rightElbowRot, pose._rightElbowVel)
-        bc.resetJointStateMultiDof(humanoid, leftHip, pose._leftHipRot, pose._leftHipVel)
-        bc.resetJointStateMultiDof(humanoid, leftKnee, pose._leftKneeRot, pose._leftKneeVel)
-        bc.resetJointStateMultiDof(humanoid, leftAnkle, pose._leftAnkleRot, pose._leftAnkleVel)
-        bc.resetJointStateMultiDof(humanoid, leftShoulder, pose._leftShoulderRot,
-                                   pose._leftShoulderVel)
-        bc.resetJointStateMultiDof(humanoid, leftElbow, pose._leftElbowRot, pose._leftElbowVel)
+        # bc.resetJointState(humanoid, right_shoulder_r, right_shoulder_rpy[0],
+        #                   pose._rightShoulderVel[0])
+        # bc.resetJointState(humanoid, right_shoulder_p, right_shoulder_rpy[1],
+        #                   pose._rightShoulderVel[1])
+        # bc.resetJointState(humanoid, right_shoulder_y, right_shoulder_rpy[2],
+        #                   pose._rightShoulderVel[2])
+        bc.resetJointState(humanoid, right_shoulder_y, right_shoulder_rpy[2],
+                          pose._rightShoulderVel[2])
+        bc.resetJointState(humanoid, right_shoulder_p, right_shoulder_rpy[1],
+                          pose._rightShoulderVel[1])
+        bc.resetJointState(humanoid, right_shoulder_r, right_shoulder_rpy[0],
+                          pose._rightShoulderVel[0])      
+        bc.resetJointState(humanoid, right_elbow, pose._rightElbowRot[0], pose._rightElbowVel[0])
       else:
-        bc.resetJointStateMultiDof(humanoid, chest, pose._chestRot)
-        bc.resetJointStateMultiDof(humanoid, neck, pose._neckRot)
-        bc.resetJointStateMultiDof(humanoid, rightHip, pose._rightHipRot)
-        bc.resetJointStateMultiDof(humanoid, rightKnee, pose._rightKneeRot)
-        bc.resetJointStateMultiDof(humanoid, rightAnkle, pose._rightAnkleRot)
-        bc.resetJointStateMultiDof(humanoid, rightShoulder, pose._rightShoulderRot)
-        bc.resetJointStateMultiDof(humanoid, rightElbow, pose._rightElbowRot)
-        bc.resetJointStateMultiDof(humanoid, leftHip, pose._leftHipRot)
-        bc.resetJointStateMultiDof(humanoid, leftKnee, pose._leftKneeRot)
-        bc.resetJointStateMultiDof(humanoid, leftAnkle, pose._leftAnkleRot)
-        bc.resetJointStateMultiDof(humanoid, leftShoulder, pose._leftShoulderRot)
-        bc.resetJointStateMultiDof(humanoid, leftElbow, pose._leftElbowRot)
+        # bc.resetJointState(humanoid, right_shoulder_r, right_shoulder_rpy[0])
+        # bc.resetJointState(humanoid, right_shoulder_p, right_shoulder_rpy[1])
+        # bc.resetJointState(humanoid, right_shoulder_y, right_shoulder_rpy[2])
+        bc.resetJointState(humanoid, right_shoulder_y, right_shoulder_rpy[2])
+        bc.resetJointState(humanoid, right_shoulder_p, right_shoulder_rpy[1])
+        bc.resetJointState(humanoid, right_shoulder_r, right_shoulder_rpy[0])
+        bc.resetJointState(humanoid, right_elbow, pose._rightElbowRot[0])
 
-    bc.setJointMotorControlMultiDof(humanoid,
-                                    chest,
-                                    controlMode,
-                                    targetPosition=pose._chestRot,
-                                    positionGain=kp,
-                                    force=[200])
-    bc.setJointMotorControlMultiDof(humanoid,
-                                    neck,
-                                    controlMode,
-                                    targetPosition=pose._neckRot,
-                                    positionGain=kp,
-                                    force=[50])
-    bc.setJointMotorControlMultiDof(humanoid,
-                                    rightHip,
-                                    controlMode,
-                                    targetPosition=pose._rightHipRot,
-                                    positionGain=kp,
-                                    force=[200])
-    bc.setJointMotorControlMultiDof(humanoid,
-                                    rightKnee,
-                                    controlMode,
-                                    targetPosition=pose._rightKneeRot,
-                                    positionGain=kp,
-                                    force=[150])
-    bc.setJointMotorControlMultiDof(humanoid,
-                                    rightAnkle,
-                                    controlMode,
-                                    targetPosition=pose._rightAnkleRot,
-                                    positionGain=kp,
-                                    force=[90])
-    bc.setJointMotorControlMultiDof(humanoid,
-                                    rightShoulder,
-                                    controlMode,
-                                    targetPosition=pose._rightShoulderRot,
-                                    positionGain=kp,
-                                    force=[100])
-    bc.setJointMotorControlMultiDof(humanoid,
-                                    rightElbow,
-                                    controlMode,
-                                    targetPosition=pose._rightElbowRot,
-                                    positionGain=kp,
-                                    force=[60])
-    bc.setJointMotorControlMultiDof(humanoid,
-                                    leftHip,
-                                    controlMode,
-                                    targetPosition=pose._leftHipRot,
-                                    positionGain=kp,
-                                    force=[200])
-    bc.setJointMotorControlMultiDof(humanoid,
-                                    leftKnee,
-                                    controlMode,
-                                    targetPosition=pose._leftKneeRot,
-                                    positionGain=kp,
-                                    force=[150])
-    bc.setJointMotorControlMultiDof(humanoid,
-                                    leftAnkle,
-                                    controlMode,
-                                    targetPosition=pose._leftAnkleRot,
-                                    positionGain=kp,
-                                    force=[90])
-    bc.setJointMotorControlMultiDof(humanoid,
-                                    leftShoulder,
-                                    controlMode,
-                                    targetPosition=pose._leftShoulderRot,
-                                    positionGain=kp,
-                                    force=[100])
-    bc.setJointMotorControlMultiDof(humanoid,
-                                    leftElbow,
-                                    controlMode,
-                                    targetPosition=pose._leftElbowRot,
-                                    positionGain=kp,
-                                    force=[60])
+    bc.setJointMotorControl2(humanoid,
+                            right_shoulder_y,
+                            controlMode,
+                            targetPosition=right_shoulder_rpy[2],
+                            positionGain=kp,
+                            force=100)
+    bc.setJointMotorControl2(humanoid,
+                            right_shoulder_p,
+                            controlMode,
+                            targetPosition=right_shoulder_rpy[1],
+                            positionGain=kp,
+                            force=100)
+    bc.setJointMotorControl2(humanoid,
+                            right_shoulder_r,
+                            controlMode,
+                            targetPosition=right_shoulder_rpy[0],
+                            positionGain=kp,
+                            force=100)
+    bc.setJointMotorControl2(humanoid,
+                            right_elbow,
+                            controlMode,
+                            targetPosition=pose._rightElbowRot[0],
+                            positionGain=kp,
+                            force=60)
   
     # print('--applypose jointstate: ', bc.getJointState(self._humanoid, 4))    
 
@@ -645,232 +529,6 @@ class Humanoid(object):
       #  jsm = bc.getJointStateMultiDof(self._humanoid, j)
       #  if (len(jsm[0])>0):
       #    bc.resetJointStateMultiDof(self._humanoidDebug,j,jsm[0])
-
-  def GetState(self):
-
-    stateVector = []
-    phase = self.GetPhase()
-    #print("phase=",phase)
-    stateVector.append(phase)
-
-    rootTransPos, rootTransOrn = self.BuildOriginTrans()
-    basePos, baseOrn = self._pybullet_client.getBasePositionAndOrientation(self._humanoid)
-
-    rootPosRel, dummy = self._pybullet_client.multiplyTransforms(rootTransPos, rootTransOrn,
-                                                                 basePos, [0, 0, 0, 1])
-    #print("!!!rootPosRel =",rootPosRel )
-    #print("rootTransPos=",rootTransPos)
-    #print("basePos=",basePos)
-    localPos, localOrn = self._pybullet_client.multiplyTransforms(rootTransPos, rootTransOrn,
-                                                                  basePos, baseOrn)
-
-    localPos = [
-        localPos[0] - rootPosRel[0], localPos[1] - rootPosRel[1], localPos[2] - rootPosRel[2]
-    ]
-    #print("localPos=",localPos)
-
-    stateVector.append(rootPosRel[1])
-
-    self.pb2dmJoints = [0, 1, 2, 9, 10, 11, 3, 4, 5, 12, 13, 14, 6, 7, 8]
-
-    for pbJoint in range(self._pybullet_client.getNumJoints(self._humanoid)):
-      j = self.pb2dmJoints[pbJoint]
-      #print("joint order:",j)
-      ls = self._pybullet_client.getLinkState(self._humanoid, j, computeForwardKinematics=True)
-      linkPos = ls[0]
-      linkOrn = ls[1]
-      linkPosLocal, linkOrnLocal = self._pybullet_client.multiplyTransforms(
-          rootTransPos, rootTransOrn, linkPos, linkOrn)
-      if (linkOrnLocal[3] < 0):
-        linkOrnLocal = [-linkOrnLocal[0], -linkOrnLocal[1], -linkOrnLocal[2], -linkOrnLocal[3]]
-      linkPosLocal = [
-          linkPosLocal[0] - rootPosRel[0], linkPosLocal[1] - rootPosRel[1],
-          linkPosLocal[2] - rootPosRel[2]
-      ]
-      for l in linkPosLocal:
-        stateVector.append(l)
-
-      #re-order the quaternion, DeepMimic uses w,x,y,z
-      stateVector.append(linkOrnLocal[3])
-      stateVector.append(linkOrnLocal[0])
-      stateVector.append(linkOrnLocal[1])
-      stateVector.append(linkOrnLocal[2])
-
-    for pbJoint in range(self._pybullet_client.getNumJoints(self._humanoid)):
-      j = self.pb2dmJoints[pbJoint]
-      ls = self._pybullet_client.getLinkState(self._humanoid, j, computeLinkVelocity=True)
-      linkLinVel = ls[6]
-      linkAngVel = ls[7]
-      for l in linkLinVel:
-        stateVector.append(l)
-      for l in linkAngVel:
-        stateVector.append(l)
-
-    #print("stateVector len=",len(stateVector))
-    #for st in range (len(stateVector)):
-    #  print("state[",st,"]=",stateVector[st])
-    return stateVector
-
-  def GetReward(self):
-    #from DeepMimic double cSceneImitate::CalcRewardImitate
-    pose_w = 0.5
-    vel_w = 0.05
-    end_eff_w = 0  #0.15
-    root_w = 0  #0.2
-    com_w = 0.1
-
-    total_w = pose_w + vel_w + end_eff_w + root_w + com_w
-    pose_w /= total_w
-    vel_w /= total_w
-    end_eff_w /= total_w
-    root_w /= total_w
-    com_w /= total_w
-
-    pose_scale = 2
-    vel_scale = 0.1
-    end_eff_scale = 40
-    root_scale = 5
-    com_scale = 10
-    err_scale = 1
-
-    reward = 0
-
-    pose_err = 0
-    vel_err = 0
-    end_eff_err = 0
-    root_err = 0
-    com_err = 0
-    heading_err = 0
-
-    #create a mimic reward, comparing the dynamics humanoid with a kinematic one
-
-    pose = self.InitializePoseFromMotionData()
-    #print("self._kinematicHumanoid=",self._kinematicHumanoid)
-    #print("kinematicHumanoid #joints=",self.kin_client.getNumJoints(self._kinematicHumanoid))
-    self.ApplyPose(pose, True, True, self._kinematicHumanoid, self.kin_client)
-
-    #const Eigen::VectorXd& pose0 = sim_char.GetPose();
-    #const Eigen::VectorXd& vel0 = sim_char.GetVel();
-    #const Eigen::VectorXd& pose1 = kin_char.GetPose();
-    #const Eigen::VectorXd& vel1 = kin_char.GetVel();
-    #tMatrix origin_trans = sim_char.BuildOriginTrans();
-    #tMatrix kin_origin_trans = kin_char.BuildOriginTrans();
-    #
-    #tVector com0_world = sim_char.CalcCOM();
-    #tVector com_vel0_world = sim_char.CalcCOMVel();
-    #tVector com1_world;
-    #tVector com_vel1_world;
-    #cRBDUtil::CalcCoM(joint_mat, body_defs, pose1, vel1, com1_world, com_vel1_world);
-    #
-    root_id = 0
-    #tVector root_pos0 = cKinTree::GetRootPos(joint_mat, pose0);
-    #tVector root_pos1 = cKinTree::GetRootPos(joint_mat, pose1);
-    #tQuaternion root_rot0 = cKinTree::GetRootRot(joint_mat, pose0);
-    #tQuaternion root_rot1 = cKinTree::GetRootRot(joint_mat, pose1);
-    #tVector root_vel0 = cKinTree::GetRootVel(joint_mat, vel0);
-    #tVector root_vel1 = cKinTree::GetRootVel(joint_mat, vel1);
-    #tVector root_ang_vel0 = cKinTree::GetRootAngVel(joint_mat, vel0);
-    #tVector root_ang_vel1 = cKinTree::GetRootAngVel(joint_mat, vel1);
-
-    mJointWeights = [
-        0.20833, 0.10416, 0.0625, 0.10416, 0.0625, 0.041666666666666671, 0.0625, 0.0416, 0.00,
-        0.10416, 0.0625, 0.0416, 0.0625, 0.0416, 0.0000
-    ]
-
-    num_end_effs = 0
-    num_joints = 15
-
-    root_rot_w = mJointWeights[root_id]
-    #pose_err += root_rot_w * cKinTree::CalcRootRotErr(joint_mat, pose0, pose1)
-    #vel_err += root_rot_w * cKinTree::CalcRootAngVelErr(joint_mat, vel0, vel1)
-
-    for j in range(num_joints):
-      curr_pose_err = 0
-      curr_vel_err = 0
-      w = mJointWeights[j]
-
-      simJointInfo = self._pybullet_client.getJointStateMultiDof(self._humanoid, j)
-
-      #print("simJointInfo.pos=",simJointInfo[0])
-      #print("simJointInfo.vel=",simJointInfo[1])
-      kinJointInfo = self.kin_client.getJointStateMultiDof(self._kinematicHumanoid, j)
-      #print("kinJointInfo.pos=",kinJointInfo[0])
-      #print("kinJointInfo.vel=",kinJointInfo[1])
-      if (len(simJointInfo[0]) == 1):
-        angle = simJointInfo[0][0] - kinJointInfo[0][0]
-        curr_pose_err = angle * angle
-        velDiff = simJointInfo[1][0] - kinJointInfo[1][0]
-        curr_vel_err = velDiff * velDiff
-      if (len(simJointInfo[0]) == 4):
-        #print("quaternion diff")
-        diffQuat = self._pybullet_client.getDifferenceQuaternion(simJointInfo[0], kinJointInfo[0])
-        axis, angle = self._pybullet_client.getAxisAngleFromQuaternion(diffQuat)
-        curr_pose_err = angle * angle
-        diffVel = [
-            simJointInfo[1][0] - kinJointInfo[1][0], simJointInfo[1][1] - kinJointInfo[1][1],
-            simJointInfo[1][2] - kinJointInfo[1][2]
-        ]
-        curr_vel_err = diffVel[0] * diffVel[0] + diffVel[1] * diffVel[1] + diffVel[2] * diffVel[2]
-
-      pose_err += w * curr_pose_err
-      vel_err += w * curr_vel_err
-
-    #  bool is_end_eff = sim_char.IsEndEffector(j)
-    #  if (is_end_eff)
-    #  {
-    #    tVector pos0 = sim_char.CalcJointPos(j)
-    #    tVector pos1 = cKinTree::CalcJointWorldPos(joint_mat, pose1, j)
-    #    double ground_h0 = mGround->SampleHeight(pos0)
-    #    double ground_h1 = kin_char.GetOriginPos()[1]
-    #
-    #    tVector pos_rel0 = pos0 - root_pos0
-    #    tVector pos_rel1 = pos1 - root_pos1
-    #    pos_rel0[1] = pos0[1] - ground_h0
-    #    pos_rel1[1] = pos1[1] - ground_h1
-    #
-    #    pos_rel0 = origin_trans * pos_rel0
-    #    pos_rel1 = kin_origin_trans * pos_rel1
-    #
-    #    curr_end_err = (pos_rel1 - pos_rel0).squaredNorm()
-    #    end_eff_err += curr_end_err;
-    #    ++num_end_effs;
-    #  }
-    #}
-    #if (num_end_effs > 0):
-    #  end_eff_err /= num_end_effs
-    #
-    #double root_ground_h0 = mGround->SampleHeight(sim_char.GetRootPos())
-    #double root_ground_h1 = kin_char.GetOriginPos()[1]
-    #root_pos0[1] -= root_ground_h0
-    #root_pos1[1] -= root_ground_h1
-    #root_pos_err = (root_pos0 - root_pos1).squaredNorm()
-    #
-    #root_rot_err = cMathUtil::QuatDiffTheta(root_rot0, root_rot1)
-    #root_rot_err *= root_rot_err
-
-    #root_vel_err = (root_vel1 - root_vel0).squaredNorm()
-    #root_ang_vel_err = (root_ang_vel1 - root_ang_vel0).squaredNorm()
-
-    #root_err = root_pos_err
-    #    + 0.1 * root_rot_err
-    #    + 0.01 * root_vel_err
-    #    + 0.001 * root_ang_vel_err
-    #com_err = 0.1 * (com_vel1_world - com_vel0_world).squaredNorm()
-
-    #print("pose_err=",pose_err)
-    #print("vel_err=",vel_err)
-    pose_reward = math.exp(-err_scale * pose_scale * pose_err)
-    vel_reward = math.exp(-err_scale * vel_scale * vel_err)
-    end_eff_reward = math.exp(-err_scale * end_eff_scale * end_eff_err)
-    root_reward = math.exp(-err_scale * root_scale * root_err)
-    com_reward = math.exp(-err_scale * com_scale * com_err)
-
-    reward = pose_w * pose_reward + vel_w * vel_reward + end_eff_w * end_eff_reward + root_w * root_reward + com_w * com_reward
-
-    #print("reward = %f (pose_reward=%f, vel_reward=%f, end_eff_reward=%f, root_reward=%f, com_reward=%f)\n", reward,
-    # pose_reward,vel_reward,end_eff_reward, root_reward, com_reward);
-
-    return reward
 
   def GetBasePosition(self):
     pos, orn = self._pybullet_client.getBasePositionAndOrientation(self._humanoid)

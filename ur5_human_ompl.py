@@ -86,29 +86,30 @@ class HumanDemo():
     def init_robot_configs(self):
         # move robot to grasp pose
         pos, orn = self.bc.getLinkState(self.humanoid._humanoid, 4)[:2]  
-        pos_up = (pos[0], pos[1]+0.13, pos[2])
+        # pos_up = (pos[0], pos[1]+0.13, pos[2])
+        pos_up = (pos[0], pos[1]+2.0, pos[2])
         for _ in range(50):
             self.robot.move_ee(action=pos_up + (-1.57, 0.15, -1.57), control_method='end')
             self.bc.stepSimulation()
         
-        # attach human arm to eef
-        body_pose = self.bc.getLinkState(self.robot.id, self.robot.eef_id)
-        obj_pose = self.bc.getLinkState(self.humanoid._humanoid, 4)
-        world_to_body = self.bc.invertTransform(body_pose[0], body_pose[1])
-        obj_to_body = self.bc.multiplyTransforms(world_to_body[0],
-                                            world_to_body[1],
-                                            obj_pose[0], obj_pose[1])
+        # # attach human arm to eef
+        # body_pose = self.bc.getLinkState(self.robot.id, self.robot.eef_id)
+        # obj_pose = self.bc.getLinkState(self.humanoid._humanoid, 4)
+        # world_to_body = self.bc.invertTransform(body_pose[0], body_pose[1])
+        # obj_to_body = self.bc.multiplyTransforms(world_to_body[0],
+        #                                     world_to_body[1],
+        #                                     obj_pose[0], obj_pose[1])
 
-        cid = self.bc.createConstraint(parentBodyUniqueId=self.robot.id,
-                            parentLinkIndex=self.robot.eef_id,
-                            childBodyUniqueId=self.humanoid._humanoid,
-                            childLinkIndex=4,
-                            jointType=p.JOINT_FIXED,
-                            jointAxis=(0, 0, 0),
-                            parentFramePosition=obj_to_body[0],
-                            parentFrameOrientation=obj_to_body[1],
-                            childFramePosition=(0, 0, 0),
-                            childFrameOrientation=(0, 0, 0))
+        # cid = self.bc.createConstraint(parentBodyUniqueId=self.robot.id,
+        #                     parentLinkIndex=self.robot.eef_id,
+        #                     childBodyUniqueId=self.humanoid._humanoid,
+        #                     childLinkIndex=4,
+        #                     jointType=p.JOINT_FIXED,
+        #                     jointAxis=(0, 0, 0),
+        #                     parentFramePosition=obj_to_body[0],
+        #                     parentFrameOrientation=obj_to_body[1],
+        #                     childFramePosition=(0, 0, 0),
+        #                     childFrameOrientation=(0, 0, 0))
 
     def clear_obstacles(self):
         for obstacle in self.obstacles:
@@ -138,28 +139,38 @@ class HumanDemo():
 if __name__ == '__main__':
     env = HumanDemo()
 
+    # print('* ', env.bc.getJointInfo(env.humanoid._humanoid, 3)[4:6])
+    # print('* ', env.bc.getJointInfo(env.humanoid._humanoid, 4)[4:6])
+    # print('* ', env.bc.getJointInfo(env.humanoid._humanoid, 5)[4:6])
+
     tsrchain = define_tsrchain(env)
     sample = tsrchain.sample()  # sample pose of the end-effector
     pos, orn = transform_to_pose(sample)
-    print(sample)
-    print(pos, orn)
 
-    virtualManipId = define_virtual_manip(env)
+    # virtualManipId, virtualManipDOF = define_virtual_manip(env, tsrchain)
 
-    for i in range(env.bc_second.getNumJoints(virtualManipId)):
-        print(env.bc_second.getJointInfo(virtualManipId, i))
-    
-    print('* ', env.bc.getLinkState(env.humanoid._humanoid, 3)[4:6])
-    print('* ', env.bc.getLinkState(env.humanoid._humanoid, 4)[4:6])
-    print('* ', env.bc.getLinkState(env.humanoid._humanoid, 5)[4:6])
+    # for i in range(env.bc.getNumJoints(virtualManipId)):
+    #     print(i, env.bc.getLinkState(virtualManipId, i))
+
+    # get human joint positions
+    # shoulder_joint = env.bc.getJointStateMultiDof(env.humanoid._humanoid, 3)[0]
+    # elbow_joint = env.bc.getJointState(env.humanoid._humanoid, 4)[0]
+    # print('shoulder_joint: ', shoulder_joint)
+    # print('elbow_joint: ', elbow_joint)
+
+    # reset human arm joints to ???
+    shoulder_joint = [-0.24918899093443897, -0.7468826816822298, 0.5814163450803189, 0.2050027811364538]
+    # shoulder_joint = bc.getEulerFromQuaternion(shoulder_joint)
+    env.bc.setJointMotorControlMultiDof(env.humanoid._humanoid, 3, p.POSITION_CONTROL, targetPosition=shoulder_joint)
+    env.bc.setJointMotorControl2(env.humanoid._humanoid, 4, p.POSITION_CONTROL, targetPosition=0)
 
     while (True):
         env.bc.configureDebugVisualizer(p.COV_ENABLE_SINGLE_STEP_RENDERING)
-        env.robot.move_ee(action=np.concatenate((pos, env.bc.getEulerFromQuaternion(orn))), control_method='end')
+
+        # env.robot.move_ee(action=np.concatenate((pos, env.bc.getEulerFromQuaternion(orn))), control_method='end')
+        # env.bc.setJointMotorControl2(virtualManipId, 2, p.POSITION_CONTROL, targetPosition=1.5)
+
         env.bc.stepSimulation()
 
     # env.demo()
-
-
-
 

@@ -41,7 +41,7 @@ EPSILON = 0.001
 class TSR(object):
     """ A Task-Space-Region (TSR) represents a motion constraint. """
     def __init__(self, T0_w=None, Tw_e=None, Bw=None,
-                 manipindex=None, bodyandlink='NULL'):
+                 manipindex=None, bodyandlink='NULL', isSpherical=False, jointAxis=[0,0,0]):
         if T0_w is None:
             T0_w = numpy.eye(4)
         if Tw_e is None:
@@ -76,6 +76,8 @@ class TSR(object):
         self.manipindex = manipindex
 
         self.bodyandlink = bodyandlink
+        self.isSpherical = isSpherical
+        self.jointAxis = jointAxis
 
     @staticmethod
     def rot_to_rpy(rot):
