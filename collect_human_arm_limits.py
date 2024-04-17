@@ -73,6 +73,14 @@ def human_motion_from_frame_data_without_applypose(humanoid, utNum, bc_arg):
   print('--human_zmotion_from_frame_data_without_applypose: ', pose._rightShoulderRot)
   print('--human_zmotion_from_frame_data_without_applypose: ', pose._rightElbowRot)
 
+def draw_sphere_marker(bc, position, radius=0.07, color=[1, 0, 0, 1]):
+  vs_id = bc.createVisualShape(p.GEOM_SPHERE, radius=radius, rgbaColor=color)
+  marker_id = bc.createMultiBody(basePosition=position, baseCollisionShapeIndex=-1, baseVisualShapeIndex=vs_id)
+  return marker_id
+
+def remove_marker(bc, marker_id):
+    bc.removeBody(marker_id)
+
 # # default
 # dataset_path = 'data/data_3d_h36m.npz'
 # motionPath = 'data/Sitting1.json'
@@ -115,16 +123,10 @@ table2ID = bc.loadURDF("table/table.urdf", (1.5, 0.0, 1.6), y2zOrn, globalScalin
 # robot.reset()
 
 
-# right_shoulder_y = 3
-# right_shoulder_p = 4
-# right_shoulder_r = 5
-# right_elbow = 7
-
-right_shoulder_r = 3
+right_shoulder_y = 3
 right_shoulder_p = 4
-right_shoulder_y = 5
+right_shoulder_r = 5
 right_elbow = 7
-
 
 motion = MotionCaptureData()
 motion.Load(motionPath)
@@ -133,43 +135,60 @@ humanoid = Humanoid(bc, motion, [0, 0.3, 0])
 
 right_shoulder_rpy = [1.0, 1.0, 1.0]
 
+world_to_cp = ((-0.5470086409113522, 0.3882300086040547, 0.4471872168793343), 
+               (0.8014364705032705, 0.4986393080874306, 0.24895397868887204, -0.21698004671473697))
+world_to_eef = ((-0.5414309985407247, 0.5279839286314739, 0.4593252144653385), 
+                (-0.47718940632453627, 0.521248437497874, -0.4664003768983218, 0.5320347971014351))
+eef_to_world = bc.invertTransform(world_to_eef[0], world_to_eef[1])
+cp_to_eef = bc.multiplyTransforms(eef_to_world[0], eef_to_world[1],
+                                        world_to_cp[0], world_to_cp[1])
+
+
 for i in range(bc.getNumJoints(humanoid._humanoid)):
   print(bc.getJointInfo(humanoid._humanoid, i))
 
+## TODO get feasible cp poses from datasets + robot goal pose
+kwonji = 0
+marker = None
+while True:
+   human_motion_from_frame_data(humanoid, kwonji, bc)
+   world_to_new_cp = bc.getLinkState(humanoid._humanoid, right_elbow)[:2]
+   world_to_new_eef = bc.multiplyTransforms(world_to_new_cp[0], world_to_new_cp[1],
+                                        cp_to_eef[0], cp_to_eef[1])
+   if marker is not None:
+    remove_marker(bc, marker)
+   marker = draw_sphere_marker(bc, world_to_new_eef[0])
+   bc.stepSimulation()
+   time.sleep(0.5)
+   kwonji += 10
 
-# while True:
-#   # bc.setJointMotorControl2(humanoid._humanoid, right_shoulder_y, controlMode=p.POSITION_CONTROL, targetPosition=right_shoulder_rpy[2])
-  
-#   # bc.setJointMotorControl2(humanoid._humanoid, right_shoulder_p, controlMode=p.POSITION_CONTROL, targetPosition=right_shoulder_rpy[1])
-#   # bc.setJointMotorControl2(humanoid._humanoid, right_shoulder_r, controlMode=p.POSITION_CONTROL, targetPosition=right_shoulder_rpy[0])
-#   # time.sleep(0.1)
-#   bc.stepSimulation()
+## TODO simulating human motion based on frame datasets
+simTime = 0
+keyFrameDuration = motion.KeyFrameDuraction()
+for utNum in range(motion.NumFrames()):
+# for utNum in range(100):
+  bc.stepSimulation()
+  humanoid.RenderReference(utNum * keyFrameDuration, bc)  # RenderReference calls Slerp() & ApplyPose()
+  time.sleep(0.01)
 
 
-# ## TODO simulating human motion based on frame datasets
-# simTime = 0
-# keyFrameDuration = motion.KeyFrameDuraction()
-# for utNum in range(motion.NumFrames()):
-# # for utNum in range(100):
-#   bc.stepSimulation()
-#   humanoid.RenderReference(utNum * keyFrameDuration, bc)  # RenderReference calls Slerp() & ApplyPose()
-#   # print('getJointStateMultiDof: ', bc.getJointStateMultiDof(humanoid._humanoid, 3))
-#   time.sleep(0.01)
 
 
-# ## TODO range of feasible human joints
-# rightElbows = [angle for angle in humanoid._rightElbowJointAnglesList]
-# print('rightElbows min: ', min(rightElbows), 'max:', max(rightElbows))
+## TODO range of feasible human joints
+rightElbows = [angle for angle in humanoid._rightElbowJointAnglesList]
+print('rightElbows min: ', min(rightElbows), 'max:', max(rightElbows))
 
-# rightShoulders1 = [angle1 for angle1, angle2, angle3 in humanoid._rightShoulderJointAnglesList]
-# rightShoulders2 = [angle2 for angle1, angle2, angle3 in humanoid._rightShoulderJointAnglesList]
-# rightShoulders3 = [angle3 for angle1, angle2, angle3 in humanoid._rightShoulderJointAnglesList]
-# print('rightShoulders1 min: ', min(rightShoulders1), 'max:', max(rightShoulders1))
-# print('rightShoulders2 min: ', min(rightShoulders2), 'max:', max(rightShoulders2))
-# print('rightShoulders3 min: ', min(rightShoulders3), 'max:', max(rightShoulders3))
+# order: [roll, pitch, yaw]
+rightShoulders1 = [angle1 for angle1, angle2, angle3 in humanoid._rightShoulderJointAnglesList]
+rightShoulders2 = [angle2 for angle1, angle2, angle3 in humanoid._rightShoulderJointAnglesList]
+rightShoulders3 = [angle3 for angle1, angle2, angle3 in humanoid._rightShoulderJointAnglesList]
+print('rightShoulders1 min: ', min(rightShoulders1), 'max:', max(rightShoulders1))
+print('rightShoulders2 min: ', min(rightShoulders2), 'max:', max(rightShoulders2))
+print('rightShoulders3 min: ', min(rightShoulders3), 'max:', max(rightShoulders3))
 
-# Reset(humanoid)
-# p.disconnect()
+Reset(humanoid)
+p.disconnect()
+sys.exit()
 
 
 
@@ -201,24 +220,21 @@ jr = list(np.array(ul) - np.array(ll))
 #restposes for null space
 rp = q_H
 
-for _ in range(10):
-  q_H = bc.calculateInverseKinematics(humanoid._humanoid, right_elbow, 
-                                      targetPosition=cp_pos, targetOrientation=cp_orn,
-                                      lowerLimits=ll, upperLimits=ul,
-                                      jointRanges=jr, restPoses=rp,
-                                      maxNumIterations=100, residualThreshold=0.0001
-                                      )
-  print('calculated q_H from IK: ', q_H)
+q_H = bc.calculateInverseKinematics(humanoid._humanoid, right_elbow, 
+                                    targetPosition=cp_pos, targetOrientation=cp_orn,
+                                    # lowerLimits=ll, upperLimits=ul,
+                                    # jointRanges=jr, restPoses=rp,
+                                    # maxNumIterations=100, residualThreshold=0.0001
+                                    )
+print('calculated q_H from IK: ', q_H)
 time.sleep(2)
 
-for _ in range(500):
-   bc.setJointMotorControl2(humanoid._humanoid, right_shoulder_y, p.POSITION_CONTROL, q_H[2])
-   bc.setJointMotorControl2(humanoid._humanoid, right_shoulder_p, p.POSITION_CONTROL, q_H[1])
-   bc.setJointMotorControl2(humanoid._humanoid, right_shoulder_r, p.POSITION_CONTROL, q_H[0])
-   bc.setJointMotorControl2(humanoid._humanoid, right_elbow, p.POSITION_CONTROL, q_H[3])
-   bc.stepSimulation()
+bc.resetJointState(humanoid._humanoid, right_shoulder_y, q_H[2])
+bc.resetJointState(humanoid._humanoid, right_shoulder_p, q_H[1])
+bc.resetJointState(humanoid._humanoid, right_shoulder_r, q_H[0])
+bc.resetJointState(humanoid._humanoid, right_elbow, q_H[3])
+bc.stepSimulation()
 print('moved to IK q_H')
-time.sleep(2)
 
 print(bc.getJointState(humanoid._humanoid, right_shoulder_r)[0])
 print(bc.getJointState(humanoid._humanoid, right_shoulder_p)[0])

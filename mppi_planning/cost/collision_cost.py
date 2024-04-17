@@ -69,8 +69,8 @@ class CollisionCost(nn.Module):
                 # Write control point locations in link frames as transforms
                 self.control_points = dict()
                 for link_name, ctrl_point_list in control_points.items():
-                    print('*link_name: ', link_name)
-                    print('*ctlr_point_list: ', ctrl_point_list)
+                    # print('*link_name: ', link_name)
+                    # print('*ctlr_point_list: ', ctrl_point_list)
                     self.control_points[link_name] = []
                     for ctrl_point in ctrl_point_list:
                         ctrl_pose_link_frame = torch.eye(4, device = self._device, dtype = self._float_dtype)
@@ -132,9 +132,9 @@ class CollisionCost(nn.Module):
         control_point_locations = torch.zeros((batch_size, num_control_points, 3)).to(device = self._device, dtype = self._float_dtype)
         idx=0
         for link_name, ctrl_point_transforms in self.control_points.items():
-            print('link name', link_name)
-            print('link_transformations: ', link_transformations)
-            print('link_transformations[link_name]: ', link_transformations[link_name])
+            # print('link name', link_name)
+            # print('link_transformations: ', link_transformations)
+            # print('link_transformations[link_name]: ', link_transformations[link_name])
             ctrl_point_transforms_base = torch.matmul(link_transformations[link_name].get_matrix().unsqueeze(1).to(device = self._device, dtype = self._float_dtype), ctrl_point_transforms)
             control_point_locations[:, idx : idx + ctrl_point_transforms.shape[0], :] = ctrl_point_transforms_base[:,:,:3,3]
             idx += ctrl_point_transforms.shape[0]

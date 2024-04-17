@@ -9,7 +9,7 @@ class RobotBase(object):
     The base class for robots
     """
 
-    def __init__(self, pybullet_client, pos, ori):
+    def __init__(self, pybullet_client, pos, ori, globalScaling=1):
         """
         Arguments:
             pybullet_client: The instance of BulletClient to manage different simulations
@@ -38,6 +38,7 @@ class RobotBase(object):
         self.pybullet_client = pybullet_client
         self.base_pos = pos
         self.base_ori = self.pybullet_client.getQuaternionFromEuler(ori)
+        self.globalScaling = globalScaling
 
     def load(self):
         self.__init_robot__()
@@ -125,8 +126,6 @@ class RobotBase(object):
             assert len(action) == self.arm_num_dofs
             joint_poses = action
         # arm
-        print('move_ee', joint_poses)
-        print('move_ee', [joint_poses[i] for i in self.arm_controllable_joints])
         for i, joint_id in enumerate(self.arm_controllable_joints):
             self.pybullet_client.setJointMotorControl2(self.id, joint_id, p.POSITION_CONTROL, joint_poses[i],
                                     force=self.joints[joint_id].maxForce, maxVelocity=self.joints[joint_id].maxVelocity)
@@ -179,7 +178,7 @@ class UR5Robotiq85(RobotBase):
         self.arm_rest_poses = [-1.5690622952052096, -1.5446774605904932, 1.343946009733127, -1.3708613585093699,
                                -1.5707970583733368, 0.0009377758247187636]
         self.id = self.pybullet_client.loadURDF('pybullet_ur5/urdf/ur5_robotiq_85.urdf', self.base_pos, self.base_ori,
-                             useFixedBase=True, flags=self.pybullet_client.URDF_ENABLE_CACHED_GRAPHICS_SHAPES, globalScaling=1)
+                             useFixedBase=True, flags=self.pybullet_client.URDF_ENABLE_CACHED_GRAPHICS_SHAPES, globalScaling=self.globalScaling)
         self.gripper_range = [0, 0.085]
     
     def __post_load__(self):

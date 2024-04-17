@@ -29,7 +29,7 @@ class InformedRRTStar:
 
     def __init__(self, start_config, goal_config, obstacle_list, 
                  ur5, UR5_JOINT_INDICES,
-                 expand_dis=0.8, goal_sample_rate=10, max_iter=200):
+                 expand_dis=0.8, goal_sample_rate=10, max_iter=50):
         self.start = Node(start_config)
         self.goal = Node(goal_config)
         self.expand_dis = expand_dis
@@ -60,6 +60,9 @@ class InformedRRTStar:
                 q_node.set_parent(parent_idx)
                 self.node_list[parent_idx].add_child(q_idx)
                 self.node_list.append(q_node)
+
+        # re-initialize informed sampling space
+        self.informed_sampler = InformedSampler(np.array(path[-1]), np.array(path[0])) 
         
         # add initial path to solution set if near goal
         last_node = self.node_list[-1]
@@ -77,22 +80,20 @@ class InformedRRTStar:
         c_best = self.initialize_cbest_and_tree(path)
         # for i, node in enumerate(self.node_list):
         #     print(f'{i} node: {node.config}, cost: {node.cost}, parent: {node.parent}, children: {node.children}')
-        # print('c_best: ', c_best)
+        print('c_best: ', c_best)
         # sys.exit()
 
         rand_config = self.informed_sampler.sample(c_best)
         rand_node = Node(rand_config)
-        # path = self.get_path_to_goal()
-        # print('*** ', path)
-        # return path
 
         for i in range(self.max_iter):
+            # print(i)
             rand_config = self.informed_sampler.sample(c_best)
             rand_node = Node(rand_config)
-            nearest_node_idx, nearest_node = self.find_nearest(rand_node, self.node_list)
+            nearest_node_idx, nearest_node = self.find_nearest(rand_node, self.node_list)            
 
             # if no collision
-            if self.steer_to(rand_node, nearest_node):
+            if nearest_node is not None and self.steer_to(rand_node, nearest_node):
                 new_node = copy.deepcopy(rand_node)
                 new_node.set_parent(nearest_node_idx)
                 new_node.cost = nearest_node.cost + self.distance(nearest_node, new_node)
@@ -261,7 +262,16 @@ class InformedRRTStar:
             print(f'goal idx: {goal_idx}')
             return self.gen_final_course(goal_idx)
         else:
-            return None
+            goal_idx = None
+            min_dist = float('inf')
+            for idx, node in enumerate(self.node_list):
+                dist_to_goal = self.distance(node, self.goal)
+                if goal_idx is None or dist_to_goal < min_dist:
+                    goal_idx = idx
+                    min_dist = dist_to_goal
+            print(f'goal idx: {goal_idx}')
+            print(f'cost: {self.node_list[goal_idx].cost}')
+            return self.gen_final_course(goal_idx)
         
     def gen_final_course(self, goal_idx):
         """

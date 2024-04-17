@@ -288,9 +288,7 @@ class TrajectoryPlanner:
         """
 
         # Store current_configuration
-        print('current_ja: ', current_ja)
         current_ja_tensor = torch.from_numpy(np.array(current_ja)).double().to(self._device)
-        print('current_ja_tensor: ', current_ja_tensor)
 
         # Get trajectory rollout
         rollout, _ = self._mppi_obj.command(current_ja_tensor)

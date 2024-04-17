@@ -18,8 +18,8 @@ from pybullet_utils.bullet_client import BulletClient
 
 # humanoid
 from env.motion_capture_data import MotionCaptureData
-from humanoid import Humanoid
-from humanoid import HumanoidPose
+from humanoid_with_rev import Humanoid
+from humanoid_with_rev import HumanoidPose
 
 
 def Reset(humanoid):
@@ -29,6 +29,11 @@ def Reset(humanoid):
   humanoid.SetSimTime(simTime)
   pose = humanoid.InitializePoseFromMotionData()
   humanoid.ApplyPose(pose, True, True, humanoid._humanoid, bc)
+
+def human_motion_from_frame_data(humanoid, utNum, bc_arg):
+  keyFrameDuration = motion.KeyFrameDuraction()
+  bc_arg.stepSimulation()
+  humanoid.RenderReference(utNum * keyFrameDuration, bc_arg)  # RenderReference calls Slerp() & ApplyPose()
 
 def draw_sphere_marker(bc, position, radius, color):
   vs_id = bc.createVisualShape(p.GEOM_SPHERE, radius=radius, rgbaColor=color)
@@ -51,13 +56,12 @@ bc.setGravity(0, -9.8, 0)
 
 y2zOrn = bc.getQuaternionFromEuler((-1.57, 0, 0))
 planeID = bc.loadURDF("plane.urdf", (0, -0.04, 0), y2zOrn)  # ground floor
-bedID = bc.loadURDF("./urdf/bed_0.urdf", (0.0, 0.0, 0.0), y2zOrn, useFixedBase=True, globalScaling=1.2)  # bed
+bedID = bc.loadURDF("./urdf/bed_0.urdf", (0.0, 0.0, 0.0), y2zOrn, useFixedBase=True, globalScaling=1.0)  # bed
 table1ID = bc.loadURDF("table/table.urdf", (-1.5, 0.0, 1.6), y2zOrn, globalScaling=0.6)  # table
 table2ID = bc.loadURDF("table/table.urdf", (1.5, 0.0, 1.6), y2zOrn, globalScaling=0.6)  # table
-block_id = bc.loadURDF("cube.urdf", (-1.0, 0.15, 0), y2zOrn, useFixedBase=True, globalScaling=0.45)
 
 # load robot
-robot = UR5Robotiq85(bc, (-1.0, 0.35, 0), (-1.57, 0, 0))
+robot = UR5Robotiq85(bc, (-0.75, 0, 0), (-1.57, 0, 0), globalScaling=1.2)
 robot.load()
 robot.reset()
 
@@ -66,109 +70,161 @@ motion = MotionCaptureData()
 motion.Load(motionPath)
 humanoid = Humanoid(bc, motion, [0, 0.3, 0])
 
-# # debug parameters
-# position_control_group = []
-# position_control_group.append(p.addUserDebugParameter('x', -1.0, 1.0, -0.807))
-# position_control_group.append(p.addUserDebugParameter('y', 0.5, 1.5, 0.878))
-# position_control_group.append(p.addUserDebugParameter('z', -0.5, 1.0, 0.56))
-# position_control_group.append(p.addUserDebugParameter('roll', -3.14, 3.14, -1.57))
-# position_control_group.append(p.addUserDebugParameter('pitch', -3.14, 3.14, 0))
-# position_control_group.append(p.addUserDebugParameter('yaw', -3.14, 3.14, 3.14))
-# position_control_group.append(p.addUserDebugParameter('gripper_opening', 0, 0.085, 0.08))
+right_shoulder_y = 3
+right_shoulder_p = 4
+right_shoulder_r = 5
+right_elbow = 7
 
-# print robot info
-for joint in robot.arm_controllable_joints:
-  print(joint, bc.getJointInfo(robot.id, joint))
-  print(joint, bc.getLinkState(robot.id, joint))
+human_motion_from_frame_data(humanoid, 230, bc)
 
-# visualize control points
-shoulder_link = bc.getLinkState(robot.id, 1)[:2]
-upper_arm_link = bc.getLinkState(robot.id, 2)[:2]
-forearm_link = bc.getLinkState(robot.id, 3)[:2]
-wrist_1_link = bc.getLinkState(robot.id, 4)[:2]
-wrist_2_link = bc.getLinkState(robot.id, 5)[:2]
-wrist_3_link = bc.getLinkState(robot.id, 6)[:2]
 
-shoulder_control_points = [[0,0,0.055], [0,0,-0.055], [-0.055,0,0]]
-upper_arm_control_points = [[0,0,0.055], [0,0,-0.055], [0.055,0,0], [-0.055,0,0]]
-forearm_control_points = [[-0.012,0,-0.095], [0.012,0,-0.095]]
-wrist_1_control_points = [[0,0,0.04055], [-0.045,0.02223,0], [-0.0275,0.055,0]]
-wrist_2_control_points = [[0,0.058,0.02067], [0,-0.0172,-0.05], [0.04,-0.0172,0]]
-wrist_3_control_points = [[-0.00458,0.0489,0], [-0.04783,0,0], [0,-0.025,0.05], [0.00525,0,0.05628], [0.04535,0.03517,0], [0.053164,0.0171,0]]
+# # TODO move robot to grasp pose
+# pos, orn = bc.getLinkState(humanoid._humanoid, right_elbow)[:2]
+# pos_up = (pos[0], pos[1]+0.16, pos[2]-0.05)
+# orn = bc.getQuaternionFromEuler((-1.57, 0.35, -1.75))
 
-print(len(shoulder_control_points)+len(upper_arm_control_points)+len(forearm_control_points)+len(wrist_1_control_points)+len(wrist_2_control_points)+len(wrist_3_control_points))
+# # TODO move robot to grasp pose
+# pos, orn = bc.getLinkState(humanoid._humanoid, right_elbow)[:2]
+# pos_up = (pos[0], pos[1]+0.165, pos[2]-0.1)
+# orn = bc.getQuaternionFromEuler((-1.2, -0.6, -1.8))
 
-# draw_sphere_marker(bc, shoulder_link[0], radius=0.06, color=[1, 0, 0, 1])
-# draw_sphere_marker(bc, upper_arm_link[0], radius=0.06, color=[0, 1, 0, 1])
-# draw_sphere_marker(bc, forearm_link[0], radius=0.06, color=[0, 0, 1, 1])
-# draw_sphere_marker(bc, wrist_1_link[0], radius=0.06, color=[1, 0, 0, 1])
-# draw_sphere_marker(bc, wrist_2_link[0], radius=0.06, color=[0, 1, 0, 1])
-draw_sphere_marker(bc, wrist_3_link[0], radius=0.06, color=[0, 0, 1, 1])
+# # TODO move robot to grasp pose (60)
+# pos, orn = bc.getLinkState(humanoid._humanoid, right_elbow)[:2]
+# print(pos)
+# pos_up_2 = (pos[0]-0.4, pos[1]+0.072, pos[2]+0.04)
+# pos_up = (pos[0]-0.18, pos[1]+0.072, pos[2]+0.04)
+# orn = bc.getQuaternionFromEuler((0.890, 0.210, -0.339))
 
-# for control_point in shoulder_link:
-#   pos = [shoulder_link[0][0]+control_point[0], shoulder_link[0][1]+control_point[1], shoulder_link[0][2]+control_point[2]]
-#   draw_sphere_marker(bc, pos, radius=0.03, color=[0, 1, 0, 1])
+# TODO move robot to grasp pose (230)
+pos, orn = bc.getLinkState(humanoid._humanoid, right_elbow)[:2]
+print('pos: ', pos)
+pos_up_2 = (-0.17962980178173082, 0.7, 0.1)
+pos_up = (-0.17962980178173082, 0.590458026205689, 0.3667859122611105)
+orn = (0.42581023056381473, 0.025895246484703916, 0.8784134154854197, -0.21541809406808593)
 
-# for control_point in upper_arm_link:
-#   pos = [upper_arm_link[0][0]+control_point[0], upper_arm_link[0][1]+control_point[1], upper_arm_link[0][2]+control_point[2]]
-#   draw_sphere_marker(bc, pos, radius=0.03, color=[0, 0, 1, 1])
 
-# for control_point in forearm_control_points:
-#   pos = [forearm_link[0][0]+control_point[0], forearm_link[0][1]+control_point[1], forearm_link[0][2]+control_point[2]]
-#   draw_sphere_marker(bc, pos, radius=0.03, color=[1, 0, 0, 1])
 
-# for control_point in wrist_1_control_points:
-#   pos = [wrist_1_link[0][0]+control_point[0], wrist_1_link[0][1]+control_point[1], wrist_1_link[0][2]+control_point[2]]
-#   draw_sphere_marker(bc, pos, radius=0.03, color=[1, 0, 0, 1])
+## TODO move robot to pos_up_2
+current_joint_angles = bc.calculateInverseKinematics(robot.id, robot.eef_id, pos_up_2, orn,
+                                                robot.arm_lower_limits, robot.arm_upper_limits, robot.arm_joint_ranges, robot.arm_rest_poses,
+                                                maxNumIterations=20)
+current_joint_angles = [current_joint_angles[i] for i in range(len(robot.arm_controllable_joints))]
 
-# for control_point in wrist_2_control_points:
-#   pos = [wrist_2_link[0][0]+control_point[0], wrist_2_link[0][1]+control_point[1], wrist_2_link[0][2]+control_point[2]]
-#   draw_sphere_marker(bc, pos, radius=0.03, color=[1, 0, 0, 1])
+for _ in range (100):
+    for i, joint_id in enumerate(robot.arm_controllable_joints):
+        bc.setJointMotorControl2(robot.id, joint_id, p.POSITION_CONTROL, current_joint_angles[i],
+                                        force=robot.joints[joint_id].maxForce, maxVelocity=robot.joints[joint_id].maxVelocity)
+    bc.stepSimulation()
 
-for control_point in wrist_3_control_points:
-  pos = [wrist_3_link[0][0]+control_point[0], wrist_3_link[0][1]+control_point[1], wrist_3_link[0][2]+control_point[2]]
-  draw_sphere_marker(bc, pos, radius=0.03, color=[1, 0, 0, 1])
+### move robot to pos_up
+current_joint_angles = bc.calculateInverseKinematics(robot.id, robot.eef_id, pos_up, orn,
+                                                robot.arm_lower_limits, robot.arm_upper_limits, robot.arm_joint_ranges, robot.arm_rest_poses,
+                                                maxNumIterations=20)
+current_joint_angles = [current_joint_angles[i] for i in range(len(robot.arm_controllable_joints))]
 
+for _ in range (100):
+    for i, joint_id in enumerate(robot.arm_controllable_joints):
+        bc.setJointMotorControl2(robot.id, joint_id, p.POSITION_CONTROL, current_joint_angles[i],
+                                        force=robot.joints[joint_id].maxForce, maxVelocity=robot.joints[joint_id].maxVelocity)
+    bc.stepSimulation()
+print('moved robot to init config')
+
+# attach human arm (obj) to eef (body)
+body_pose = bc.getLinkState(robot.id, robot.eef_id)  # world to eef 
+obj_pose = bc.getLinkState(humanoid._humanoid, right_elbow)  # world to cp
+world_to_body = bc.invertTransform(body_pose[0], body_pose[1])  # eef to world
+obj_to_body = bc.multiplyTransforms(world_to_body[0],          # eef to cp
+                                    world_to_body[1],
+                                    obj_pose[0], obj_pose[1])
+
+cid = bc.createConstraint(parentBodyUniqueId=robot.id,
+                    parentLinkIndex=robot.eef_id,
+                    childBodyUniqueId=humanoid._humanoid,
+                    childLinkIndex=right_elbow,
+                    jointType=p.JOINT_FIXED,
+                    jointAxis=(0, 0, 0),
+                    parentFramePosition=obj_to_body[0],
+                    parentFrameOrientation=obj_to_body[1],
+                    childFramePosition=(0, 0, 0),
+                    childFrameOrientation=(0, 0, 0))
+
+
+# TODO manually move robot and print its joint configs
 while True:
   p.configureDebugVisualizer(p.COV_ENABLE_SINGLE_STEP_RENDERING) 
 
-  # bc.setJointMotorControl2(robot.id, 1, p.POSITION_CONTROL, 1.0)
-  robot.reset()
-
-  # parameter = []
-  # for i in range(len(position_control_group)):
-  #   parameter.append(bc.readUserDebugParameter(position_control_group[i]))
-
-  # robot.move_ee(action=parameter[:-1], control_method='end')
-  # robot.move_gripper(parameter[-1])
+  for i, joint_id in enumerate(robot.arm_controllable_joints):
+    print(i, bc.getJointState(robot.id, joint_id)[0])
 
   p.stepSimulation()
 
 
+# # TODO test grasp pose
+# position_control_group = []
+# position_control_group.append(p.addUserDebugParameter('x', -1.5, 1.5, pos_up[0]))
+# position_control_group.append(p.addUserDebugParameter('y', -1.5, 1.5, pos_up[1]))
+# position_control_group.append(p.addUserDebugParameter('z', -1.5, 1.5, pos_up[2]))
+# position_control_group.append(p.addUserDebugParameter('roll', -3.14, 3.14, orn[0]))
+# position_control_group.append(p.addUserDebugParameter('pitch', -3.14, 3.14, orn[1]))
+# position_control_group.append(p.addUserDebugParameter('yaw', -3.14, 3.14, orn[2]))
+# position_control_group.append(p.addUserDebugParameter('gripper_opening', 0, 0.085, 0.08))
 
-### simulating human motion based on frame datasets
-# simTime = 0
-# keyFrameDuration = motion.KeyFrameDuraction()
-# for utNum in range(motion.NumFrames()):
-#   bc.stepSimulation()
-#   humanoid.RenderReference(utNum * keyFrameDuration)  # RenderReference calls Slerp() & ApplyPose()
-#   print('getJointStateMultiDof: ', bc.getJointStateMultiDof(humanoid._humanoid, 3))
-#   time.sleep(0.01)
+
+# while True:
+#   p.configureDebugVisualizer(p.COV_ENABLE_SINGLE_STEP_RENDERING) 
+
+#   parameter = []
+#   for i in range(len(position_control_group)):
+#     parameter.append(bc.readUserDebugParameter(position_control_group[i]))
+
+#   robot.move_ee(action=parameter[:-1], control_method='end')
+#   robot.move_gripper(parameter[-1])
+
+#   p.stepSimulation()
 
 
 
-### range of feasible human joints
-# rightElbows = [angle for angle in humanoid._rightElbowJointAnglesList]
-# rightShoulders1 = [angle1 for angle1, angle2, angle3, angle4 in humanoid._rightShoulderJointAnglesList]
-# rightShoulders2 = [angle2 for angle1, angle2, angle3, angle4 in humanoid._rightShoulderJointAnglesList]
-# rightShoulders3 = [angle3 for angle1, angle2, angle3, angle4 in humanoid._rightShoulderJointAnglesList]
-# rightShoulders4 = [angle4 for angle1, angle2, angle3, angle4 in humanoid._rightShoulderJointAnglesList]
-# print('rightElbows min: ', min(rightElbows), 'max:', max(rightElbows))
-# print('rightShoulders1 min: ', min(rightShoulders1), 'max:', max(rightShoulders1))
-# print('rightShoulders2 min: ', min(rightShoulders2), 'max:', max(rightShoulders2))
-# print('rightShoulders3 min: ', min(rightShoulders3), 'max:', max(rightShoulders3))
-# print('rightShoulders4 min: ', min(rightShoulders4), 'max:', max(rightShoulders4))
+# # TODO test grasp pose
+# current_joint_angles = bc.calculateInverseKinematics(robot.id, robot.eef_id, pos_up, orn,
+#                                                 robot.arm_lower_limits, robot.arm_upper_limits, robot.arm_joint_ranges, robot.arm_rest_poses,
+#                                                 maxNumIterations=20)
+# current_joint_angles = [current_joint_angles[i] for i in range(len(robot.arm_controllable_joints))]
 
-Reset(humanoid)
-p.disconnect()
+# joint_control_group = []
+# for i, joint in enumerate(current_joint_angles):
+#    joint_control_group.append(p.addUserDebugParameter(f'joint {i}', robot.arm_lower_limits[i], robot.arm_upper_limits[i], current_joint_angles[i]))
 
+# while True:
+#     p.configureDebugVisualizer(p.COV_ENABLE_SINGLE_STEP_RENDERING) 
+    
+#     parameter = []
+#     for i in range(len(joint_control_group)):
+#       parameter.append(bc.readUserDebugParameter(joint_control_group[i]))
+    
+#     for i, joint_id in enumerate(robot.arm_controllable_joints):
+#         bc.setJointMotorControl2(robot.id, joint_id, p.POSITION_CONTROL, parameter[i],
+#                                         force=robot.joints[joint_id].maxForce, maxVelocity=robot.joints[joint_id].maxVelocity)
+#     bc.stepSimulation()
+
+
+
+# TODO move to target joint
+# target_pos = (-0.505, 0.268, -0.395)
+# target_orn = bc.getQuaternionFromEuler((-0.297, -0.826, -1.686))
+# current_joint_angles = bc.calculateInverseKinematics(robot.id, robot.eef_id, target_pos, target_orn,
+#                                                 robot.arm_lower_limits, robot.arm_upper_limits, robot.arm_joint_ranges, robot.arm_rest_poses,
+#                                                 maxNumIterations=20)
+# current_joint_angles = [current_joint_angles[i] for i in range(len(robot.arm_controllable_joints))]
+# print(current_joint_angles)
+
+current_joint_angles = [-0.628, -1.389, 1.356, -1.554, -2.778, 0.231]
+
+while True:
+  p.configureDebugVisualizer(p.COV_ENABLE_SINGLE_STEP_RENDERING) 
+  
+  for i, joint_id in enumerate(robot.arm_controllable_joints):
+      bc.setJointMotorControl2(robot.id, joint_id, p.POSITION_CONTROL, current_joint_angles[i],
+                                      force=robot.joints[joint_id].maxForce, maxVelocity=robot.joints[joint_id].maxVelocity)
+  bc.stepSimulation()
+
+  print(bc.getLinkState(robot.id, robot.eef_id)[:2])

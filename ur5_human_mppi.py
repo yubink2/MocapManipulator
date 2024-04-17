@@ -19,8 +19,8 @@ import numpy as np
 
 # humanoid
 from deep_mimic.env.motion_capture_data import MotionCaptureData
-from humanoid import Humanoid
-from humanoid import HumanoidPose
+from humanoid_with_rev import Humanoid
+from humanoid_with_rev import HumanoidPose
 
 # ramp
 from mppi_planning.trajectory_planning import TrajectoryPlanner
@@ -38,6 +38,7 @@ class HumanDemo():
         self.obstacles = []
 
         self.bc = BulletClient(connection_mode=p.GUI)
+        # self.bc = BulletClient(connection_mode=p.DIRECT)
         self.bc.setAdditionalSearchPath(pybullet_data.getDataPath())
         self.bc.configureDebugVisualizer(self.bc.COV_ENABLE_Y_AXIS_UP, 1)
         self.bc.setGravity(0, -9.8, 0) 
@@ -50,16 +51,20 @@ class HumanDemo():
         bed_id = self.bc.loadURDF("./urdf/bed_0.urdf", (0.0, 0.0, 0.0), y2zOrn, useFixedBase=True, globalScaling=1.2)  # bed
         table1_id = self.bc.loadURDF("table/table.urdf", (-1.5, 0.0, 1.3), y2zOrn, globalScaling=0.6)  # table
         table2_id = self.bc.loadURDF("table/table.urdf", (1.5, 0.0, 1.3), y2zOrn, globalScaling=0.6)  # table
-        block_id = self.bc.loadURDF("cube.urdf", (-1.0, 0.15, 0), y2zOrn, useFixedBase=True, globalScaling=0.45)  # block on robot
+        # block_id = self.bc.loadURDF("cube.urdf", (-1.0, 0.15, 0), y2zOrn, useFixedBase=True, globalScaling=0.45)  # block on robot
 
         # load human
-        motionPath = 'data/Greeting.json'
+        # motionPath = 'data/Greeting.json'
+        motionPath = 'data/Sitting1.json'
         motion = MotionCaptureData()
         motion.Load(motionPath)
         self.humanoid = Humanoid(self.bc, motion, [0, 0.3, 0])
-
-        # while(True):
-        #     self.bc.stepSimulation()
+        self.right_shoulder_y = 3
+        self.right_shoulder_p = 4
+        self.right_shoulder_r = 5
+        self.right_elbow = 7
+        self.human_rest_poses = [2.4790802489002552, -0.01642306738465106, -1.8128412472566666, 0.4529190452054409]
+        self.human_motion_from_frame_data(self.humanoid, motion, 230)
 
         # add obstacles
         self.obstacles.append(plane_id)
@@ -69,62 +74,74 @@ class HumanDemo():
         # self.obstacles.append(block_id)
 
         # load robot
-        self.robot = UR5Robotiq85(self.bc, (-1.0, 0.35, 0), (-1.57, 0, 0))
-        # self.robot = UR5Robotiq85(self.bc, (-1.0, 0.2, 0), (-1.57, 0, 0))
+        # self.robot = UR5Robotiq85(self.bc, (-0.75, 0.3, 0.25), (-1.57, 0, 0))
+        self.robot = UR5Robotiq85(self.bc, (-0.75, 0, 0), (-1.57, 0, 0), globalScaling=1.2)
         self.robot.load()
         self.robot.reset()
         self.init_robot_configs()
 
+        # while True:
+        #     self.bc.stepSimulation()
+
     def init_robot_configs(self):
-        self.current_joint_angles = [self.robot.arm_rest_poses[i] for i in range(len(self.robot.arm_controllable_joints))]
+        # self.current_joint_angles = [self.robot.arm_rest_poses[i] for i in range(len(self.robot.arm_controllable_joints))]
 
-        # # move robot to grasp pose
-        # pos, orn = self.bc.getLinkState(self.humanoid._humanoid, 4)[:2]  
-        # pos_up = (pos[0], pos[1]+0.13, pos[2])
-        # orn = self.bc.getQuaternionFromEuler((-1.57, 0.15, -1.57))
+        # move robot to grasp pose
+        pos, orn = self.bc.getLinkState(self.humanoid._humanoid, self.right_elbow)[:2]
+        print(pos)
 
-        # current_joint_angles = self.bc.calculateInverseKinematics(self.robot.id, self.robot.eef_id, pos_up, orn,
-        #                                                self.robot.arm_lower_limits, self.robot.arm_upper_limits, self.robot.arm_joint_ranges, self.robot.arm_rest_poses,
-        #                                                maxNumIterations=20)
-        # self.current_joint_angles = [current_joint_angles[i] for i in range(len(self.robot.arm_controllable_joints))]
+        # KWONJI
+        pos_up_2 = (-0.17962980178173082, 0.7, 0.1)
+        pos_up = (-0.17962980178173082, 0.590458026205689, 0.3667859122611105)
+        orn = (0.42581023056381473, 0.025895246484703916, 0.8784134154854197, -0.21541809406808593)
 
-        # for _ in range (50):
-        #     for i, joint_id in enumerate(self.robot.arm_controllable_joints):
-        #         self.bc.setJointMotorControl2(self.robot.id, joint_id, p.POSITION_CONTROL, current_joint_angles[i],
-        #                                         force=self.robot.joints[joint_id].maxForce, maxVelocity=self.robot.joints[joint_id].maxVelocity)
-        #         self.bc.stepSimulation()
-        #     # time.sleep(0.1)
-        # print('moved robot to init config')
+        if pos_up_2 is not None:
+            current_joint_angles = self.bc.calculateInverseKinematics(self.robot.id, self.robot.eef_id, pos_up_2, orn,
+                                                       self.robot.arm_lower_limits, self.robot.arm_upper_limits, self.robot.arm_joint_ranges, self.robot.arm_rest_poses,
+                                                       maxNumIterations=20)
 
-        # # attach human arm (obj) to eef (body)
-        # body_pose = self.bc.getLinkState(self.robot.id, self.robot.eef_id)  # eef to world
-        # obj_pose = self.bc.getLinkState(self.humanoid._humanoid, 4)  # cp to world
-        # world_to_body = self.bc.invertTransform(body_pose[0], body_pose[1])  # world to eef
-        # obj_to_body = self.bc.multiplyTransforms(world_to_body[0],
-        #                                     world_to_body[1],
-        #                                     obj_pose[0], obj_pose[1])  # world to eef * cp to world
+            for _ in range (100):
+                for i, joint_id in enumerate(self.robot.arm_controllable_joints):
+                    self.bc.setJointMotorControl2(self.robot.id, joint_id, p.POSITION_CONTROL, current_joint_angles[i],
+                                                    force=self.robot.joints[joint_id].maxForce, maxVelocity=self.robot.joints[joint_id].maxVelocity)
+                self.bc.stepSimulation()
+        
 
-        # cid = self.bc.createConstraint(parentBodyUniqueId=self.robot.id,
-        #                     parentLinkIndex=self.robot.eef_id,
-        #                     childBodyUniqueId=self.humanoid._humanoid,
-        #                     childLinkIndex=4,
-        #                     jointType=p.JOINT_FIXED,
-        #                     jointAxis=(0, 0, 0),
-        #                     parentFramePosition=obj_to_body[0],
-        #                     parentFrameOrientation=obj_to_body[1],
-        #                     childFramePosition=(0, 0, 0),
-        #                     childFrameOrientation=(0, 0, 0))
+        current_joint_angles = self.bc.calculateInverseKinematics(self.robot.id, self.robot.eef_id, pos_up, orn,
+                                                       self.robot.arm_lower_limits, self.robot.arm_upper_limits, self.robot.arm_joint_ranges, self.robot.arm_rest_poses,
+                                                       maxNumIterations=20)
+        self.current_joint_angles = [current_joint_angles[i] for i in range(len(self.robot.arm_controllable_joints))]
+
+        for _ in range (100):
+            for i, joint_id in enumerate(self.robot.arm_controllable_joints):
+                self.bc.setJointMotorControl2(self.robot.id, joint_id, p.POSITION_CONTROL, current_joint_angles[i],
+                                                force=self.robot.joints[joint_id].maxForce, maxVelocity=self.robot.joints[joint_id].maxVelocity)
+            self.bc.stepSimulation()
+        print('moved robot to init config')
+
+        # attach human arm (obj) to eef (body)
+        body_pose = self.bc.getLinkState(self.robot.id, self.robot.eef_id)  # world to eef 
+        obj_pose = self.bc.getLinkState(self.humanoid._humanoid, self.right_elbow)  # world to cp
+        world_to_body = self.bc.invertTransform(body_pose[0], body_pose[1])  # eef to world
+        obj_to_body = self.bc.multiplyTransforms(world_to_body[0],          # eef to cp
+                                            world_to_body[1],
+                                            obj_pose[0], obj_pose[1])
+
+        cid = self.bc.createConstraint(parentBodyUniqueId=self.robot.id,
+                            parentLinkIndex=self.robot.eef_id,
+                            childBodyUniqueId=self.humanoid._humanoid,
+                            childLinkIndex=self.right_elbow,
+                            jointType=p.JOINT_FIXED,
+                            jointAxis=(0, 0, 0),
+                            parentFramePosition=obj_to_body[0],
+                            parentFrameOrientation=obj_to_body[1],
+                            childFramePosition=(0, 0, 0),
+                            childFrameOrientation=(0, 0, 0))
+        
 
     def clear_obstacles(self):
         for obstacle in self.obstacles:
             p.removeBody(obstacle)
-
-    def add_box(self, box_pos, half_box_size):
-        colBoxId = p.createCollisionShape(p.GEOM_BOX, halfExtents=half_box_size)
-        box_id = p.createMultiBody(baseMass=0, baseCollisionShapeIndex=colBoxId, basePosition=box_pos)
-
-        self.obstacles.append(box_id)
-        return box_id
 
     def draw_sphere_marker(self, position, radius=0.07, color=[1, 0, 0, 1]):
         vs_id = self.bc.createVisualShape(p.GEOM_SPHERE, radius=radius, rgbaColor=color)
@@ -154,21 +171,23 @@ class HumanDemo():
         ]
 
         # Instantiate mppi H clamp
-        eef_to_world = self.bc.getLinkState(self.robot.id, self.robot.eef_id)[:2]
-        cp_to_world = self.bc.getLinkState(self.humanoid._humanoid, 4)[:2]
-        world_to_cp = self.bc.invertTransform(cp_to_world[0], cp_to_world[1])
+        world_to_eef = self.bc.getLinkState(self.robot.id, self.robot.eef_id)[:2]
+        eef_to_world = self.bc.invertTransform(world_to_eef[0], world_to_eef[1])
+        world_to_cp = self.bc.getLinkState(self.humanoid._humanoid, self.right_elbow)[:2]
         eef_to_cp = self.bc.multiplyTransforms(eef_to_world[0], eef_to_world[1],
-                                        world_to_cp[0], world_to_cp[1])
+                                                world_to_cp[0], world_to_cp[1])
 
-        shoulder_min = [-2.583238756496965, -0.248997453133789, -3.1402077384521765]
-        shoulder_max = [-1.3229245882839409, 1.2392816988875348, 3.1415394736319917]
+        # order for humanoid urdf: [yaw, pitch, roll]
+        shoulder_min = [-3.1402077384521765, -0.248997453133789, -2.583238756496965]
+        shoulder_max = [3.1415394736319917, 1.2392816988875348, -1.3229245882839409]
         # elbow_min = [0.401146]
         elbow_min = [0]
         elbow_max = [2.541304]  
         self.human_arm_lower_limits = shoulder_min + elbow_min
         self.human_arm_upper_limits = shoulder_max + elbow_max
 
-        self.mppi_H_clamp = MPPI_H_Clamp(eef_to_cp, self.human_arm_lower_limits, self.human_arm_upper_limits, self.current_joint_angles)
+        self.mppi_H_clamp = MPPI_H_Clamp(eef_to_cp, self.current_joint_angles, 
+                                         self.human_arm_lower_limits, self.human_arm_upper_limits, self.human_rest_poses)
 
         # Instantiate trajectory planner
         self.trajectory_planner = TrajectoryPlanner(
@@ -184,16 +203,6 @@ class HumanDemo():
         )
         print("Instantiated trajectory planner")
 
-        # # Trajectory Follower initialization
-        # self.trajectory_follower = TrajectoryFollower(
-        #     joint_limits = JOINT_LIMITS,
-        #     robot_urdf_location = robot_urdf_location,
-        #     link_fixed = LINK_FIXED,
-        #     link_ee = LINK_EE,
-        #     link_skeleton = LINK_SKELETON,
-        # )
-        # print('trajectory follower instantiated')
-
         # MPPI parameters
         N_JOINTS = len(self.robot.arm_controllable_joints)
         mppi_control_limits = [
@@ -204,32 +213,73 @@ class HumanDemo():
         mppi_covariance = 0.005
         mppi_lambda = 1.0
 
-        # human goal config
-        cp_pos, cp_orn = env.bc.getLinkState(env.humanoid._humanoid, 4)[:2]  
-        cp_pos_up = (cp_pos[0]+0.2, cp_pos[1]+0.5, cp_pos[2]-0.5)
-        cp_orn = env.bc.getQuaternionFromEuler((-1.57, 0.15, -1.57))
+        # robot goal pose
+        # cp_pos, cp_orn = env.bc.getLinkState(env.humanoid._humanoid, self.right_elbow)[:2]
+        # cp_pos = (cp_pos[0]+0.15, cp_pos[1]+0.25, cp_pos[2]+0.15)  # feasible goal config
+        # cp_pos = (cp_pos[0]+0.1, cp_pos[1]+0.35, cp_pos[2]-0.1)  # feasible goal config
+        cp_pos = [0.08, 0.38, 0.284]
+        cp_orn = [-0.562, 0.727, -0.297] #env.bc.getQuaternionFromEuler((-0.562, 0.727, -0.297))
+        grasp_pose = cp_pos + cp_orn
+                  
+        # KWONJI 1
+        # cp_orn = env.bc.getQuaternionFromEuler((-1.57, 0.35, -1.75))
 
-        # mark goal pose
-        vs_id = self.bc.createVisualShape(p.GEOM_SPHERE, radius=0.05, rgbaColor=[0, 1, 0, 1])
-        marker_id = self.bc.createMultiBody(basePosition=cp_pos_up, baseCollisionShapeIndex=-1, baseVisualShapeIndex=vs_id)
+        # KWONJI 2
+        # cp_orn = env.bc.getQuaternionFromEuler((-1.2, -0.6, -1.8))
 
-        # Find joint angles
+        self.eef_goal_pose = (cp_pos, cp_orn)
+
+        # # mark goal pose
+        # self.draw_sphere_marker(cp_pos, radius=0.05, color=[0, 1, 0, 1])
+
+        # while True:
+        #     self.robot.move_ee(action=grasp_pose, control_method='end')
+        #     self.bc.stepSimulation() 
+
+        # world_to_cp_goal = ((-0.4968800171961967, 0.40857648299834726, 0.38046846967865205),
+        #                     (0.917834969986322, 0.31931322730674455, 0.22248896777694108, -0.07820927026069255))
+        # # cp_goal_to_world = self.bc.invertTransform(world_to_cp_goal[0], world_to_cp_goal[1])
+        # cp_to_eef = self.bc.invertTransform(eef_to_cp[0], eef_to_cp[1])
+        # world_to_eef_goal = self.bc.multiplyTransforms(world_to_cp_goal[0], world_to_cp_goal[1],
+        #                                               cp_to_eef[0], cp_to_eef[1])
+
+        # # mark goal pose
+        # self.draw_sphere_marker(world_to_cp_goal[0], radius=0.05, color=[0, 1, 0, 1])
+        # self.draw_sphere_marker(world_to_eef_goal[0], radius=0.05, color=[1,0,0,1])
+        # while True:
+        #     self.bc.stepSimulation()
+        
+        # # Find joint angles
+        # current_joint_angles = self.current_joint_angles
+        # target_joint_angles = self.bc.calculateInverseKinematics(self.robot.id, self.robot.eef_id, cp_pos, cp_orn,
+        #                                     self.robot.arm_lower_limits, self.robot.arm_upper_limits, self.robot.arm_joint_ranges, self.robot.arm_rest_poses,
+        #                                     maxNumIterations=20)
+        # target_joint_angles = [target_joint_angles[i] for i in range(len(self.robot.arm_controllable_joints))]
+        # self.target_joint_angles = target_joint_angles
+        # print("q_init: ", current_joint_angles)
+        # print("q_goal: ", target_joint_angles)
+
+        # TODO set joint angles
         current_joint_angles = self.current_joint_angles
-        target_joint_angles = self.bc.calculateInverseKinematics(self.robot.id, self.robot.eef_id, cp_pos_up, cp_orn,
-                                            self.robot.arm_lower_limits, self.robot.arm_upper_limits, self.robot.arm_joint_ranges, self.robot.arm_rest_poses,
-                                            maxNumIterations=20)
-        target_joint_angles = [target_joint_angles[i] for i in range(len(self.robot.arm_controllable_joints))]
+        # target_joint_angles = [-1.831, -2.231, 1.914, -1.047, -0.110, -1.836]
+        # target_joint_angles = [-1.238, -2.177, 2.047, -2.698, -0.723, -0.579]
+        # target_joint_angles = [-1.663, -2.202, 2.015, -1.893, -0.485, -0.718]
+
+        # target_joint_angles = [-0.891, -1.955, 1.735, -2.242, -0.862, 2.426]
+
+        target_joint_angles = [-1.213, -1.369, 1.310, -1.774, -1.646, -0.115]
         self.target_joint_angles = target_joint_angles
         print("q_init: ", current_joint_angles)
         print("q_goal: ", target_joint_angles)
 
-        # for _ in range(500):
-        #     # self.robot.move_ee(action=current_joint_angles, control_method="joint")
+        # for _ in range(1000):
         #     for i, joint_id in enumerate(self.robot.arm_controllable_joints):
         #         self.bc.setJointMotorControl2(self.robot.id, joint_id, p.POSITION_CONTROL, target_joint_angles[i],
         #                                       force=self.robot.joints[joint_id].maxForce, maxVelocity=self.robot.joints[joint_id].maxVelocity)
         #     self.bc.stepSimulation() 
-        #     time.sleep(0.1)
+        
+        # for i, joint_id in enumerate(self.robot.arm_controllable_joints):
+        #     print(i, self.bc.getJointState(self.robot.id, joint_id)[0])
         # sys.exit()
 
         # Instantiate MPPI object
@@ -243,156 +293,95 @@ class HumanDemo():
         )
         print('Instantiate MPPI object')
 
-        # # Plan trajectory
-        # start_time = time.time()
-        # trajectory = self.trajectory_planner.get_mppi_rollout(current_joint_angles)
-        # print("planning time : ", time.time()-start_time)
-        # return trajectory
+        # Plan trajectory
+        start_time = time.time()
+        trajectory = self.trajectory_planner.get_mppi_rollout(current_joint_angles)
+        print("planning time : ", time.time()-start_time)
+        return trajectory
 
-        return []
-    
     def init_informed_rrtstar_planner(self, traj):
         self.informed_rrtstar_planner = InformedRRTStar(self.current_joint_angles, self.target_joint_angles, self.obstacles,
                                                         self.robot.id, self.robot.arm_controllable_joints)
         return self.informed_rrtstar_planner.plan(traj)
-    
+
     def test_clamping(self, q_R):
-        rightShoulder = 3
-        rightElbow = 4
-        current_shoulder = self.bc.getJointStateMultiDof(self.humanoid._humanoid, rightShoulder)[0]
-        current_shoulder = self.bc.getEulerFromQuaternion(current_shoulder)
-        current_elbow = self.bc.getJointState(self.humanoid._humanoid, rightElbow)[0]
-        q_H = list(current_shoulder) + [current_elbow]
-        print('current q_H: ', q_H)
-
-        cp_pos, cp_orn = self.bc.getLinkState(self.humanoid._humanoid, rightElbow)[:2]
-        
-        #lower limits for null space
-        ll = self.human_arm_lower_limits
-        #upper limits for null space
-        ul = self.human_arm_upper_limits
-        #joint ranges for null space
-        jr = list(np.array(ul) - np.array(ll))
-        print('joint ranges:', jr)
-        #restposes for null space
-        rp = q_H
-
-        q_H = self.bc.calculateInverseKinematics(self.humanoid._humanoid, rightElbow, 
-                                                targetPosition=cp_pos, targetOrientation=cp_orn,
-                                                lowerLimits=ll, upperLimits=ul,
-                                                jointRanges=jr, restPoses=rp,
-                                                maxNumIterations=300, residualThreshold=1e-6)
-        print('calculated q_H from IK: ', q_H)
-        target_shoulder = self.bc.getQuaternionFromEuler(q_H[:3])
-        print('target shoulder:', target_shoulder)
-        time.sleep(2)
-
-        for _ in range(5000):
-            self.bc.setJointMotorControlMultiDof(self.humanoid._humanoid, rightShoulder, controlMode=p.POSITION_CONTROL, targetPosition=target_shoulder)
-            self.bc.setJointMotorControl2(self.humanoid._humanoid, rightElbow, controlMode=p.POSITION_CONTROL, targetPosition=q_H[3])
-            self.bc.stepSimulation()
-
-        current_shoulder = self.bc.getJointStateMultiDof(self.humanoid._humanoid, rightShoulder)[0]
-        current_shoulder = self.bc.getEulerFromQuaternion(current_shoulder)
-        current_elbow = self.bc.getJointState(self.humanoid._humanoid, rightElbow)[0]
-        q_H = list(current_shoulder) + [current_elbow]
-        print('current q_H after: ', q_H)
-
-        # if env.mppi_H_clamp.violate_human_arm_limits(q_R):
-        #     print('violated')
-
-    def test_clamping2(self, q_R):
-        for i in range(self.bc.getNumJoints(self.humanoid._humanoid)):
-            print(self.bc.getJointInfo(self.humanoid._humanoid, i))
-        right_shoulder_r = 3
-        right_shoulder_p = 4
-        right_shoulder_y = 5
-        rightElbow = 7
-
-        # q_H_test = [-1.8193453925837375, -0.04536734052020464, 2.478893589137632, 0.45577464302391746]
-        # q_H_test = [3.14, 0.0, 3.14, 0.455]
-        q_H_test = [-1.3229245882839409, 1.2392816988875348, 3.1415394736319917, 2.541304]
-        # for _ in range(300):
-        while(True):
-            self.bc.setJointMotorControl2(self.humanoid._humanoid, right_shoulder_r, controlMode=p.POSITION_CONTROL, targetPosition=q_H_test[0])
-            self.bc.setJointMotorControl2(self.humanoid._humanoid, right_shoulder_p, controlMode=p.POSITION_CONTROL, targetPosition=q_H_test[1])
-            self.bc.setJointMotorControl2(self.humanoid._humanoid, right_shoulder_y, controlMode=p.POSITION_CONTROL, targetPosition=q_H_test[2])
-            self.bc.setJointMotorControl2(self.humanoid._humanoid, rightElbow, controlMode=p.POSITION_CONTROL, targetPosition=q_H_test[3])
-            self.bc.stepSimulation()
-
-        current_shoulder = []
-        current_shoulder.append(self.bc.getJointState(self.humanoid._humanoid, right_shoulder_r)[0])
-        current_shoulder.append(self.bc.getJointState(self.humanoid._humanoid, right_shoulder_p)[0])
-        current_shoulder.append(self.bc.getJointState(self.humanoid._humanoid, right_shoulder_y)[0])
-        current_elbow = self.bc.getJointState(self.humanoid._humanoid, rightElbow)[0]
-        q_H = list(current_shoulder) + [current_elbow]
-        print('current q_H: ', q_H)
-
-        cp_pos, cp_orn = self.bc.getLinkState(self.humanoid._humanoid, rightElbow)[:2]
-        self.draw_sphere_marker(cp_pos)
-        sys.exit()
-        
-        #lower limits for null space
-        ll = self.human_arm_lower_limits
-        #upper limits for null space
-        ul = self.human_arm_upper_limits
-        #joint ranges for null space
-        jr = list(np.array(ul) - np.array(ll))
-        #restposes for null space
-        rp = q_H
-
-        q_H = self.bc.calculateInverseKinematics(self.humanoid._humanoid, rightElbow, 
-                                                targetPosition=cp_pos, targetOrientation=cp_orn,
-                                                # lowerLimits=ll, upperLimits=ul,
-                                                # jointRanges=jr, restPoses=rp,
-                                                # maxNumIterations=100, residualThreshold=0.0001
-                                                )
-        print('calculated q_H from IK: ', q_H)
-        time.sleep(2)
-
-        for _ in range(50):
-            self.bc.setJointMotorControl2(self.humanoid._humanoid, right_shoulder_r, controlMode=p.POSITION_CONTROL, targetPosition=q_H[0])
-            self.bc.setJointMotorControl2(self.humanoid._humanoid, right_shoulder_p, controlMode=p.POSITION_CONTROL, targetPosition=q_H[1])
-            self.bc.setJointMotorControl2(self.humanoid._humanoid, right_shoulder_y, controlMode=p.POSITION_CONTROL, targetPosition=q_H[2])
-            self.bc.setJointMotorControl2(self.humanoid._humanoid, rightElbow, controlMode=p.POSITION_CONTROL, targetPosition=q_H[3])
-            self.bc.stepSimulation()
-
-        current_shoulder = []
-        current_shoulder.append(self.bc.getJointState(self.humanoid._humanoid, right_shoulder_r)[0])
-        current_shoulder.append(self.bc.getJointState(self.humanoid._humanoid, right_shoulder_p)[0])
-        current_shoulder.append(self.bc.getJointState(self.humanoid._humanoid, right_shoulder_y)[0])
-        current_elbow = self.bc.getJointState(self.humanoid._humanoid, rightElbow)[0]
-        q_H = list(current_shoulder) + [current_elbow]
-        print('current q_H after: ', q_H)
-
         if env.mppi_H_clamp.violate_human_arm_limits(q_R):
             print('violated')
-        
+        else:
+            print('we good')
+    
+    def distance_to_goal(self):
+        eef_world_pose = self.bc.getLinkState(self.robot.id, self.robot.eef_id)[:2]
+        return np.linalg.norm(np.array(eef_world_pose[0]) - np.array(self.eef_goal_pose[0]))
+    
+    def human_motion_from_frame_data(self, humanoid, motion, utNum):
+        keyFrameDuration = motion.KeyFrameDuraction()
+        self.bc.stepSimulation()
+        humanoid.RenderReference(utNum * keyFrameDuration, self.bc)
 
 
 if __name__ == '__main__':
+
     env = HumanDemo()
 
     traj = env.init_mppi_planner()
     print('MPPI planner done')
 
-    q_R = [-0.96537332, -1.05807295,  1.56956323, -1.9578728,  -1.48554134, -0.96998654]
-    env.test_clamping(q_R)
+    # # Check if last waypoint is violated
+    # if env.mppi_H_clamp.violate_human_arm_limits(traj[len(traj)-1]):
+    #     print('last waypoint violated, removed.')
+    #     traj = traj[:-1]
 
-    # print('traj before:', traj)
+    print(traj)
+
+    # time.sleep(5)
+
+    for q in traj:
+        for _ in range (100):
+            for i, joint_id in enumerate(env.robot.arm_controllable_joints):
+                env.bc.setJointMotorControl2(env.robot.id, joint_id, p.POSITION_CONTROL, q[i],
+                                                force=env.robot.joints[joint_id].maxForce, maxVelocity=env.robot.joints[joint_id].maxVelocity)
+            env.bc.stepSimulation()
+        time.sleep(0.5)
 
     # for q in traj:
-    #     if env.mppi_H_clamp.violate_human_arm_limits(q):
-    #         print(f'removed {q}')
-    #         traj.remove(q)
+    #     for i, joint_id in enumerate(env.robot.arm_controllable_joints):
+    #         env.bc.resetJointState(env.robot.id, joint_id, q[i])
+    #     env.bc.stepSimulation() 
+    #     time.sleep(0.5)
 
-    # print('traj after:', traj)
+    for i, joint_id in enumerate(env.robot.arm_controllable_joints):
+        print(i, env.bc.getJointState(env.robot.id, joint_id)[0])
+    
+    # print(f'current eef distance to goal: {env.distance_to_goal()}')
+
+
+    # eef_pose = env.bc.getLinkState(env.robot.id, env.robot.eef_id)[4:6]
+    # env.draw_sphere_marker(eef_pose[0], radius=0.05, color=[1,0,0,1])
+
+    # vs_id = env.bc.createVisualShape(p.GEOM_SPHERE, radius=0.05, rgbaColor=[1, 0, 0, 1])
+    # marker_id = env.bc.createMultiBody(basePosition=eef_pose[0], baseCollisionShapeIndex=-1, baseVisualShapeIndex=vs_id)
+
+    # cp_pose = env.bc.getLinkState(env.humanoid._humanoid, env.right_elbow)[:2]
+    # env.draw_sphere_marker(cp_pose[0], radius=0.05, color=[1,0,0,1])
+
+    time.sleep(5)
+
+
+
+    # traj2 = env.init_informed_rrtstar_planner(traj[:len(traj)-1])
+
+    # traj2 = env.init_informed_rrtstar_planner(traj)
+    # print('informed rrtstar planner done')
+    # print(traj2)
+
+
 
     # flag = False
     # for _ in range(100):
     #     # env.bc.configureDebugVisualizer(p.COV_ENABLE_SINGLE_STEP_RENDERING) 
     #     if not flag:
-    #         for q in traj:
+    #         for q in traj2:
     #             for i, joint_id in enumerate(env.robot.arm_controllable_joints):
     #                 env.bc.setJointMotorControl2(env.robot.id, joint_id, p.POSITION_CONTROL, q[i],
     #                                             force=env.robot.joints[joint_id].maxForce, maxVelocity=env.robot.joints[joint_id].maxVelocity)
@@ -400,16 +389,6 @@ if __name__ == '__main__':
     #         flag = True
     #     time.sleep(0.1)
     #     env.bc.stepSimulation()
-
-    # eef_pose = env.bc.getLinkState(env.robot.id, env.robot.eef_id)[:2]
-    # vs_id = env.bc.createVisualShape(p.GEOM_SPHERE, radius=0.05, rgbaColor=[1, 0, 0, 1])
-    # marker_id = env.bc.createMultiBody(basePosition=eef_pose[0], baseCollisionShapeIndex=-1, baseVisualShapeIndex=vs_id)
-
-
-    # # traj2 = env.init_informed_rrtstar_planner(traj[:len(traj)-1])
-    # traj2 = env.init_informed_rrtstar_planner(traj)
-    # print('informed rrtstar planner done')
-    # print(traj2)
 
     # time.sleep(2)
     # env.bc.disconnect()

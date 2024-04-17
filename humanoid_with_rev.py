@@ -460,13 +460,13 @@ class Humanoid(object):
     controlMode = bc.POSITION_CONTROL
 
     right_shoulder_rpy = bc.getEulerFromQuaternion(pose._rightShoulderRot)
-    print(pose._rightShoulderRot)
-    print(pose._rightShoulderVel)
-    print(pose._rightElbowRot)
-    print(right_shoulder_rpy)
-    print(right_shoulder_rpy[0])
-    print(right_shoulder_rpy[1])
-    print(right_shoulder_rpy[2])
+    # print(pose._rightShoulderRot)
+    # print(pose._rightShoulderVel)
+    # print(pose._rightElbowRot)
+    # print(right_shoulder_rpy)
+    # print(right_shoulder_rpy[0])
+    # print(right_shoulder_rpy[1])
+    # print(right_shoulder_rpy[2])
     
 
     if (initializeBase):

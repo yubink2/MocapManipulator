@@ -314,10 +314,10 @@ elbow_max = [2.541304]
 
 #lower limits for null space
 ll = shoulder_min + elbow_min
-ll = list(np.array(q_H) - 0.1)
+# ll = list(np.array(q_H) - 0.1)
 #upper limits for null space
 ul = shoulder_max + elbow_max
-ul = list(np.array(q_H) + 0.1)
+# ul = list(np.array(q_H) + 0.1)
 #joint ranges for null space
 jr = list(np.array(ul) - np.array(ll))
 #restposes for null space

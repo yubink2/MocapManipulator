@@ -21,6 +21,7 @@
 
 import functools
 import logging
+import sys
 
 import numpy as np
 import torch
@@ -257,11 +258,11 @@ class MPPI():
             initial_state_rollout = torch.zeros((2,self.nx)).to(dtype=self.dtype, device=self.d)
             initial_state_rollout[0] = self.state
             initial_state_rollout[1] = self.goal
-            print('init state rollout: ', initial_state_rollout)
+
             num_waypoints = max(int(torch.floor(torch.linalg.norm(self.goal - self.state) * self.waypoint_density)), 2)
             initial_state_rollout_interpolated = torch.nn.functional.interpolate(initial_state_rollout.unsqueeze(0).transpose(1,2), size=num_waypoints, mode='linear', align_corners=True).transpose(1,2).squeeze(0)
             self.state_rollout = initial_state_rollout_interpolated
-            print('init state rollout: ', initial_state_rollout)
+
             self.action_rollout = torch.roll(self.state_rollout, -1, dims=0) - self.state_rollout
             self.action_rollout[-1] = 0.0
         else:
@@ -310,14 +311,16 @@ class MPPI():
         # Compute action rollout to return
         action_rollout = self.action_rollout
 
-        # Compute the state rollout and add the goal at the end
+        # Compute the state rollout
         self.state_rollout = self.get_rollout(self.state, action_rollout)[0]
         state_rollout = torch.vstack((self.state, self.state_rollout))
-        state_rollout = torch.vstack((state_rollout, self.goal))
 
         # Upsample and downsample the trajectory
         interpolated_state_rollout = torch.nn.functional.interpolate(state_rollout.unsqueeze(0).transpose(1,2), size=500, mode='linear', align_corners=True).transpose(1,2).squeeze(0)
         state_rollout = self._downsample_trajectory(interpolated_state_rollout, 1.0/self.waypoint_density)
+
+        # # Add the goal at the end
+        # state_rollout = torch.vstack((state_rollout, self.goal))
 
         self.num_steps += 1
 
@@ -425,7 +428,6 @@ class MPPI():
         :param num_rollouts: Number of rollouts with same action sequence - for generating samples with stochastic dynamics
         :returns: states (num_rollouts x T x nx vector of trajectories)
         """
-
         state = state.view(-1, self.nx)
         if state.size(0) == 1:
             state = state.repeat(num_rollouts, 1)
