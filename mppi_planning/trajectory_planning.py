@@ -41,6 +41,7 @@ class TrajectoryPlanner:
     def __init__(
         self,
         mppi_H_clamp,
+        robot_base_to_world,
         joint_limits: List[np.ndarray],
         robot_urdf_location: str = 'resources/panda/panda.urdf',
         scene_urdf_location: str = 'resources/environment/environment.urdf',
@@ -49,6 +50,7 @@ class TrajectoryPlanner:
         link_ee: str = 'ee_link',
         link_skeleton: List[str] = ['fixed_link','ee_link'],
         control_points_number: int = 30,
+        clamp_by_human: bool = False,
         device: str = 'cuda',
     ): 
         # Define robot's number of DOF
@@ -93,6 +95,10 @@ class TrajectoryPlanner:
 
         # Initialize mppi H clamp
         self.mppi_H_clamp = mppi_H_clamp
+        self.clamp_by_human = clamp_by_human
+
+        # Initialize robot base to world transformation matrix
+        self.robot_base_to_world = robot_base_to_world
     
     def _mppi_dynamics(
         self,
@@ -115,7 +121,8 @@ class TrajectoryPlanner:
         state = torch.clamp(state+u, self._joint_limits_lower, self._joint_limits_upper)
 
         # TODO check for human arm joint limits and clamp
-        state = self.mppi_H_clamp.clamp_human_joints(state, self._device)
+        if self.clamp_by_human:
+            state = self.mppi_H_clamp.clamp_human_joints(state, self._device)
 
         return state
     
@@ -175,6 +182,8 @@ class TrajectoryPlanner:
         mppi_cost_weight_path_length = 200.0,
         mppi_cost_weight_collision = 500.0,
         mppi_consider_obstacle_collisions: bool = True,
+        waypoint_density: int = 10,
+        action_smoothing: float = 0.5,
     ) -> List:
         
         """
@@ -239,6 +248,7 @@ class TrajectoryPlanner:
             gripper_state = self._gripper_state,
             control_points_json = self._control_points_location,
             device = self._device,
+            robot_base_to_world = self.robot_base_to_world,
         )
 
         # Define MPPI object
@@ -254,9 +264,15 @@ class TrajectoryPlanner:
             temperature = mppi_lambda,
             u_min = mppi_control_limits_lower,
             u_max = mppi_control_limits_upper,
+            waypoint_density = waypoint_density,
+            action_smoothing = action_smoothing,
         )
 
         return goal_ja
+    
+    def update_clamp_by_human(self, clamp_by_human: bool):
+        # Update whether to use clamping by human arm joint limit or not
+        self.clamp_by_human = clamp_by_human
     
     def update_goal_ja(self, goal_ja: List) -> List:
         """
@@ -343,6 +359,8 @@ class TrajectoryPlanner:
             # Construct tensor describing grasp_T_object
             grasped_object_grasp_T_object = np.linalg.inv(world_T_grasp) @ world_T_object
             self._grasped_object_grasp_T_object = torch.from_numpy(grasped_object_grasp_T_object).to(self._device)
+
+        # TODO when given with control points
 
         return True
     

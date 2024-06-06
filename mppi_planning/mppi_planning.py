@@ -115,7 +115,7 @@ class MPPI():
         noise_sigma,
         goal,
         num_samples=100,
-        temperature=1.,
+        temperature=5.,
         terminal_state_cost=None,
         u_min=None,
         u_max=None,
@@ -315,12 +315,12 @@ class MPPI():
         self.state_rollout = self.get_rollout(self.state, action_rollout)[0]
         state_rollout = torch.vstack((self.state, self.state_rollout))
 
+        # Add the goal at the end 
+        state_rollout = torch.vstack((state_rollout, self.goal))
+
         # Upsample and downsample the trajectory
         interpolated_state_rollout = torch.nn.functional.interpolate(state_rollout.unsqueeze(0).transpose(1,2), size=500, mode='linear', align_corners=True).transpose(1,2).squeeze(0)
         state_rollout = self._downsample_trajectory(interpolated_state_rollout, 1.0/self.waypoint_density)
-
-        # # Add the goal at the end
-        # state_rollout = torch.vstack((state_rollout, self.goal))
 
         self.num_steps += 1
 

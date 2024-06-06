@@ -2,3 +2,6 @@ __pycache__/
 data/
 pybullet_ompl/
 limb_manip_demo_vids/
+rwe_demo_videos/
+rwe_trajs/
+contact_graspnet_pytorch/

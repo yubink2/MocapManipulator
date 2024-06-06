@@ -32,6 +32,7 @@ from .gaussian_projection import GaussianProjection
 class CollisionCost(nn.Module):
     def __init__(
         self,
+        robot_base_to_world,
         weight: float,
         differentiable_model: object,
         csdf: object,
@@ -40,7 +41,7 @@ class CollisionCost(nn.Module):
         link_skeleton: str,
         gripper_state: torch.Tensor,
         control_points_json: str = None,
-        distance_threshold: float = 0.02,
+        distance_threshold: float = 0.05,
         gaussian_params: dict = {'n':0,'c':0,'s':0,'r':0},
         device: torch.device = torch.device('cpu'),
         float_dtype: torch.dtype = torch.float32,
@@ -60,6 +61,8 @@ class CollisionCost(nn.Module):
         self._link_skeleton = link_skeleton
         self._gripper_state = gripper_state
         self._control_points_json = control_points_json
+
+        self._robot_base_to_world = torch.tensor(robot_base_to_world, device = self._device, dtype = self._float_dtype)
 
         try:
             if self._control_points_json is not None:
@@ -119,6 +122,12 @@ class CollisionCost(nn.Module):
         """
         batch_size = state.shape[0]
 
+        # Define the permutation matrix to swap y and z axes
+        P = torch.tensor([[1.0, 0.0, 0.0, 0.0],
+                            [0.0, 0.0, 1.0, 0.0],
+                            [0.0, 1.0, 0.0, 0.0],
+                            [0.0, 0.0, 0.0, 1.0]], device=self._device)
+
         # Default gripper state - set to [0.0, 0.0]
         gripper_state = torch.Tensor([0.0, 0.0, 0.0, 0.0]).to(self._device)
         num_control_points = sum(map(len, self.control_points.values()))
@@ -132,11 +141,19 @@ class CollisionCost(nn.Module):
         control_point_locations = torch.zeros((batch_size, num_control_points, 3)).to(device = self._device, dtype = self._float_dtype)
         idx=0
         for link_name, ctrl_point_transforms in self.control_points.items():
-            # print('link name', link_name)
-            # print('link_transformations: ', link_transformations)
-            # print('link_transformations[link_name]: ', link_transformations[link_name])
+            # # convert xyz to xzy coordinate system
+            # link_transformation = link_transformations[link_name].get_matrix().unsqueeze(1).to(device = self._device, dtype = self._float_dtype)
+            # link_transformation_xzy = torch.matmul(torch.matmul(P.T, link_transformation), P)
+            # ctrl_point_transforms_xzy = torch.matmul(torch.matmul(P.T, ctrl_point_transforms), P)
+            # robot_base_to_world_xzy = torch.matmul(torch.matmul(P.T, self._robot_base_to_world), P)
+
+            # ctrl_point_transforms_base = torch.matmul(link_transformation_xzy, ctrl_point_transforms_xzy)
+            # ctrl_point_transforms_world = torch.matmul(robot_base_to_world_xzy, ctrl_point_transforms_base)
+
             ctrl_point_transforms_base = torch.matmul(link_transformations[link_name].get_matrix().unsqueeze(1).to(device = self._device, dtype = self._float_dtype), ctrl_point_transforms)
-            control_point_locations[:, idx : idx + ctrl_point_transforms.shape[0], :] = ctrl_point_transforms_base[:,:,:3,3]
+            ctrl_point_transforms_world = torch.matmul(self._robot_base_to_world, ctrl_point_transforms_base)
+
+            control_point_locations[:, idx : idx + ctrl_point_transforms.shape[0], :] = ctrl_point_transforms_world[:,:,:3,3]
             idx += ctrl_point_transforms.shape[0]
         
         return control_point_locations

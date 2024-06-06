@@ -21,19 +21,16 @@ from deep_mimic.env.motion_capture_data import MotionCaptureData
 # from humanoid import Humanoid
 # from humanoid import HumanoidPose
 
-from humanoid_with_rev import Humanoid
-from humanoid_with_rev import HumanoidPose
+# from humanoid_with_rev import Humanoid
+# from humanoid_with_rev import HumanoidPose
+
+from humanoid_with_rev_xyz import Humanoid
+from humanoid_with_rev_xyz import HumanoidPose
 
 from deepmimic_json_generator import *
 from transformation import *
 
-
 import sys
-# sys.path
-# ['', '/home/exx/anaconda3/envs/py37-ompl-test/lib/python37.zip', '/home/exx/anaconda3/envs/py37-ompl-test/lib/python3.7', '/home/exx/anaconda3/envs/py37-ompl-test/lib/python3.7/lib-dynload', '/home/exx/anaconda3/envs/py37-ompl-test/lib/python3.7/site-packages']
-sys.path.append("/usr/lib/python3/dist-packages")
-import ompl
-# '/usr/lib/python3/dist-packages/ompl/__init__.py'
 sys.path.append("/usr/lib/python3/dist-packages")
 
 
@@ -106,22 +103,17 @@ loop = 'wrap'
 
 bc = BulletClient(connection_mode=p.GUI)
 
-# bc.configureDebugVisualizer(p.COV_ENABLE_GUI,0)
 bc.setAdditionalSearchPath(pybullet_data.getDataPath())
-bc.configureDebugVisualizer(bc.COV_ENABLE_Y_AXIS_UP, 1)
-bc.setGravity(0, -9.8, 0) 
+# bc.configureDebugVisualizer(bc.COV_ENABLE_Y_AXIS_UP, 1)
+# bc.setGravity(0, -9.8, 0) 
+bc.setGravity(0, 0, -9.8) 
 
-y2zOrn = bc.getQuaternionFromEuler((-1.57, 0, 0))
-planeID = bc.loadURDF("plane.urdf", (0, -0.04, 0), y2zOrn)  # ground floor
-bedID = bc.loadURDF("./urdf/bed_0.urdf", (0.0, 0.0, 0.0), y2zOrn, useFixedBase=True, globalScaling=1.2)  # bed
-table1ID = bc.loadURDF("table/table.urdf", (-1.5, 0.0, 1.6), y2zOrn, globalScaling=0.6)  # table
-table2ID = bc.loadURDF("table/table.urdf", (1.5, 0.0, 1.6), y2zOrn, globalScaling=0.6)  # table
-# blockID = bc.loadURDF("cube.urdf", (-0.9, 0.2, 0), y2zOrn, useFixedBase=True, globalScaling=0.5)  # block on robot
+# y2zOrn = bc.getQuaternionFromEuler((-1.57, 0, 0))
+# planeID = bc.loadURDF("plane.urdf", (0, -0.04, 0), y2zOrn)  # ground floor
+# bedID = bc.loadURDF("./urdf/bed_0.urdf", (0.0, 0.0, 0.0), y2zOrn, useFixedBase=True, globalScaling=1.2)  # bed
 
-# robot = UR5Robotiq85(bc, (-0.9, 0.15, 0.7), (-1.57, 0, 0))
-# robot.load()
-# robot.reset()
-
+planeID = bc.loadURDF("plane.urdf", (0, -0.04, 0))  # ground floor
+# bedID = bc.loadURDF("./urdf/bed_0.urdf", (0.0, 0.0, 0.0), useFixedBase=True, globalScaling=1.2)  # bed
 
 right_shoulder_y = 3
 right_shoulder_p = 4
@@ -131,47 +123,26 @@ right_elbow = 7
 motion = MotionCaptureData()
 motion.Load(motionPath)
 
-humanoid = Humanoid(bc, motion, [0, 0.3, 0])
+basePos = (0, 0, 0.3)
+# baseOrn = bc.getQuaternionFromEuler((0, -1.57, 0))  # this is the "correct" orientation
+baseOrn = bc.getQuaternionFromEuler((0, 1.57, 0))
+humanoid = Humanoid(bc, motion, basePos, baseOrn)
+print('loaded')
 
-right_shoulder_rpy = [1.0, 1.0, 1.0]
+bc.resetBasePositionAndOrientation(humanoid._humanoid, basePos, baseOrn)
+print('changed base')
 
-world_to_cp = ((-0.5470086409113522, 0.3882300086040547, 0.4471872168793343), 
-               (0.8014364705032705, 0.4986393080874306, 0.24895397868887204, -0.21698004671473697))
-world_to_eef = ((-0.5414309985407247, 0.5279839286314739, 0.4593252144653385), 
-                (-0.47718940632453627, 0.521248437497874, -0.4664003768983218, 0.5320347971014351))
-eef_to_world = bc.invertTransform(world_to_eef[0], world_to_eef[1])
-cp_to_eef = bc.multiplyTransforms(eef_to_world[0], eef_to_world[1],
-                                        world_to_cp[0], world_to_cp[1])
+# while True:
+#    bc.stepSimulation()
 
-
-for i in range(bc.getNumJoints(humanoid._humanoid)):
-  print(bc.getJointInfo(humanoid._humanoid, i))
-
-## TODO get feasible cp poses from datasets + robot goal pose
-kwonji = 0
-marker = None
-while True:
-   human_motion_from_frame_data(humanoid, kwonji, bc)
-   world_to_new_cp = bc.getLinkState(humanoid._humanoid, right_elbow)[:2]
-   world_to_new_eef = bc.multiplyTransforms(world_to_new_cp[0], world_to_new_cp[1],
-                                        cp_to_eef[0], cp_to_eef[1])
-   if marker is not None:
-    remove_marker(bc, marker)
-   marker = draw_sphere_marker(bc, world_to_new_eef[0])
-   bc.stepSimulation()
-   time.sleep(0.5)
-   kwonji += 10
 
 ## TODO simulating human motion based on frame datasets
 simTime = 0
 keyFrameDuration = motion.KeyFrameDuraction()
 for utNum in range(motion.NumFrames()):
-# for utNum in range(100):
   bc.stepSimulation()
   humanoid.RenderReference(utNum * keyFrameDuration, bc)  # RenderReference calls Slerp() & ApplyPose()
   time.sleep(0.01)
-
-
 
 
 ## TODO range of feasible human joints

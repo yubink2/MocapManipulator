@@ -38,28 +38,6 @@ import pytorch_kinematics as pk
 log = logging.getLogger('TRAJECTORY FOLLOWING')
 
 
-LINK_FIXED = 'panda_link0'
-
-LINK_EE = 'panda_hand'
-
-LINK_SKELETON = [
-    'panda_link1',
-    'panda_link3',
-    'panda_link4',
-    'panda_link5',
-    'panda_link7',
-    'panda_hand',
-]
-
-JOINT_LIMITS = [
-    np.array([-2.8973, -1.7628, -2.8973, -3.0718, -2.8973, -0.0175, -2.8973]),
-    np.array([2.8973, 1.7628, 2.8973, -0.0698, 2.8973, 3.7525, 2.8973])
-]
-
-
-robot_urdf_location = os.path.join('resources',"panda/panda.urdf",)
-control_points_location = os.path.join('resources',"panda_control_points/control_points.json",)
-
 class TrajectoryFollower(nn.Module):
     def __init__(
         self,
