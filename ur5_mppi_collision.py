@@ -40,7 +40,7 @@ from utils.point_cloud_utils import *
 robot_urdf_location = 'pybullet_ur5/urdf/ur5_robotiq_85.urdf'
 scene_urdf_location = 'resources/environment/environment.urdf'
 control_points_location = 'resources/ur5_control_points/control_points.json'
-control_points_number = 37
+control_points_number = 28
 
 # UR5 parameters
 LINK_FIXED = 'base_link'
@@ -79,8 +79,8 @@ class HumanDemo():
 
         # get point cloud
         point_cloud = []
-        point_cloud.extend(get_point_cloud_from_collision_shapes(self.sphere1))
-        point_cloud.extend(get_point_cloud_from_collision_shapes(self.sphere2))
+        point_cloud.extend(get_point_cloud_from_visual_shapes(self.sphere1))
+        point_cloud.extend(get_point_cloud_from_visual_shapes(self.sphere2))
         self.pcd = np.array(point_cloud)
 
         # load robot
@@ -169,7 +169,7 @@ class HumanDemo():
             control_points_location = control_points_location,
             control_points_number = control_points_number,
             mppi_H_clamp = None,
-            robot_base_to_world = self.robot_base_to_world,
+            world_to_robot_base = self.robot_base_to_world,
         )
         print("Instantiated trajectory planner")
 

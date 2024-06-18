@@ -149,7 +149,7 @@ for utNum in range(motion.NumFrames()):
 rightElbows = [angle for angle in humanoid._rightElbowJointAnglesList]
 print('rightElbows min: ', min(rightElbows), 'max:', max(rightElbows))
 
-# order: [roll, pitch, yaw]
+# order: [yaw, pitch, roll]
 rightShoulders1 = [angle1 for angle1, angle2, angle3 in humanoid._rightShoulderJointAnglesList]
 rightShoulders2 = [angle2 for angle1, angle2, angle3 in humanoid._rightShoulderJointAnglesList]
 rightShoulders3 = [angle3 for angle1, angle2, angle3 in humanoid._rightShoulderJointAnglesList]

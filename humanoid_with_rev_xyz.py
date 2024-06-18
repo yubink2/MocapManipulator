@@ -235,7 +235,7 @@ class HumanoidPose(object):
 
 class Humanoid(object):
 
-  def __init__(self, pybullet_client, motion_data, baseShift, ornShift):
+  def __init__(self, pybullet_client, motion_data, baseShift, ornShift=[0,0,0,1]):
     """Constructs a humanoid and reset it to the initial states.
     Args:
       pybullet_client: The instance of BulletClient to manage different
@@ -258,11 +258,11 @@ class Humanoid(object):
     # useFixedBase=False if want to enable base motion (e.g., walking forward) 
 
     self._humanoid = self._pybullet_client.loadURDF("urdf/humanoid_with_rev.urdf", [0, 0.9, 0],
-                                                    globalScaling=0.25,
+                                                    globalScaling=0.22,
                                                     useFixedBase=True)
 
     self._kinematicHumanoid = self.kin_client.loadURDF("urdf/humanoid_with_rev.urdf", [0, 0.9, 0],
-                                                       globalScaling=0.25,
+                                                       globalScaling=0.22,
                                                        useFixedBase=True)
 
     pose = HumanoidPose()

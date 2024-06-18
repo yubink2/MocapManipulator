@@ -131,6 +131,7 @@ class RobotBase(object):
                                     force=self.joints[joint_id].maxForce, maxVelocity=self.joints[joint_id].maxVelocity)
 
     def move_gripper(self, open_length):
+        print('cannot move gripper!')
         raise NotImplementedError
 
     def get_joint_obs(self):

@@ -114,11 +114,11 @@ ee_w = torch.from_numpy(compose_matrix(translate=shoulder_link[0], angles=should
 #   pos = control_point[:, 3]
 #   draw_sphere_marker(bc, pos, radius=0.03, color=[1, 0, 0, 1])
 
-upper_arm_control_points = torch.matmul(cp_upper_arm, upper_arm_w)
-print(upper_arm_control_points)
-for control_point in upper_arm_control_points:
-  pos = control_point[:, 3]
-  draw_sphere_marker(bc, pos, radius=0.05, color=[0, 1, 0, 1])
+# upper_arm_control_points = torch.matmul(cp_upper_arm, upper_arm_w)
+# print(upper_arm_control_points)
+# for control_point in upper_arm_control_points:
+#   pos = control_point[:, 3]
+#   draw_sphere_marker(bc, pos, radius=0.05, color=[0, 1, 0, 1])
 
 # forearm_control_points = torch.matmul(forearm_w, cp_forearm)
 # print(forearm_control_points)
@@ -127,10 +127,9 @@ for control_point in upper_arm_control_points:
 #   draw_sphere_marker(bc, pos, radius=0.03, color=[0, 0, 1, 1])
 
 
-
-# for control_point in shoulder_control_points:
-#   pos = [shoulder_link[0][0]+control_point[0], shoulder_link[0][1]+control_point[1], shoulder_link[0][2]+control_point[2]]
-#   draw_sphere_marker(bc, pos, radius=0.03, color=[0, 1, 0, 1])
+for control_point in shoulder_control_points:
+  pos = [shoulder_link[0][0]+control_point[0], shoulder_link[0][1]+control_point[1], shoulder_link[0][2]+control_point[2]]
+  draw_sphere_marker(bc, pos, radius=0.03, color=[0, 1, 0, 1])
 
 # for control_point in upper_arm_control_points:
 #   pos = [upper_arm_link[0][0]+control_point[0], upper_arm_link[0][1]+control_point[1], upper_arm_link[0][2]+control_point[2]]

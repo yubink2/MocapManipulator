@@ -32,7 +32,7 @@ from .gaussian_projection import GaussianProjection
 class CollisionCost(nn.Module):
     def __init__(
         self,
-        robot_base_to_world,
+        world_to_robot_base,
         weight: float,
         differentiable_model: object,
         csdf: object,
@@ -62,7 +62,7 @@ class CollisionCost(nn.Module):
         self._gripper_state = gripper_state
         self._control_points_json = control_points_json
 
-        self._robot_base_to_world = torch.tensor(robot_base_to_world, device = self._device, dtype = self._float_dtype)
+        self._world_to_robot_base = torch.tensor(world_to_robot_base, device = self._device, dtype = self._float_dtype)
 
         try:
             if self._control_points_json is not None:
@@ -122,12 +122,6 @@ class CollisionCost(nn.Module):
         """
         batch_size = state.shape[0]
 
-        # Define the permutation matrix to swap y and z axes
-        P = torch.tensor([[1.0, 0.0, 0.0, 0.0],
-                            [0.0, 0.0, 1.0, 0.0],
-                            [0.0, 1.0, 0.0, 0.0],
-                            [0.0, 0.0, 0.0, 1.0]], device=self._device)
-
         # Default gripper state - set to [0.0, 0.0]
         gripper_state = torch.Tensor([0.0, 0.0, 0.0, 0.0]).to(self._device)
         num_control_points = sum(map(len, self.control_points.values()))
@@ -137,23 +131,18 @@ class CollisionCost(nn.Module):
         link_transformations = self._differentiable_model.forward_kinematics(augmented_robot_state, end_only=False)
         # Link transformations is a dict with keys being link names, value is BATCH x 4 x 4
 
+        # Find end effector poses (w.r.t. robot base)
+        self.ee_pose = link_transformations[self._link_skeleton[-1]].get_matrix().unsqueeze(1).to(dtype = self._float_dtype)
+
         # Control points tensor should be BATCH x N x 3 where N is the num of control points
         control_point_locations = torch.zeros((batch_size, num_control_points, 3)).to(device = self._device, dtype = self._float_dtype)
         idx=0
         for link_name, ctrl_point_transforms in self.control_points.items():
-            # # convert xyz to xzy coordinate system
-            # link_transformation = link_transformations[link_name].get_matrix().unsqueeze(1).to(device = self._device, dtype = self._float_dtype)
-            # link_transformation_xzy = torch.matmul(torch.matmul(P.T, link_transformation), P)
-            # ctrl_point_transforms_xzy = torch.matmul(torch.matmul(P.T, ctrl_point_transforms), P)
-            # robot_base_to_world_xzy = torch.matmul(torch.matmul(P.T, self._robot_base_to_world), P)
+            # find control points with base offset transform
+            base_to_ctrl_points = torch.matmul(link_transformations[link_name].get_matrix().unsqueeze(1).to(device = self._device, dtype = self._float_dtype), ctrl_point_transforms)
+            world_to_ctrl_points = torch.matmul(self._world_to_robot_base, base_to_ctrl_points)
 
-            # ctrl_point_transforms_base = torch.matmul(link_transformation_xzy, ctrl_point_transforms_xzy)
-            # ctrl_point_transforms_world = torch.matmul(robot_base_to_world_xzy, ctrl_point_transforms_base)
-
-            ctrl_point_transforms_base = torch.matmul(link_transformations[link_name].get_matrix().unsqueeze(1).to(device = self._device, dtype = self._float_dtype), ctrl_point_transforms)
-            ctrl_point_transforms_world = torch.matmul(self._robot_base_to_world, ctrl_point_transforms_base)
-
-            control_point_locations[:, idx : idx + ctrl_point_transforms.shape[0], :] = ctrl_point_transforms_world[:,:,:3,3]
+            control_point_locations[:, idx : idx + ctrl_point_transforms.shape[0], :] = world_to_ctrl_points[:,:,:3,3]
             idx += ctrl_point_transforms.shape[0]
         
         return control_point_locations
@@ -182,12 +171,10 @@ class CollisionCost(nn.Module):
 
         # Compute grasped object control points
         if grasped_object_grasp_T_object is not None:
-            object_pose = self.ee_pose[:, ] @ grasped_object_grasp_T_object.to(dtype = self._float_dtype)
-            object_control_points = object_pose @ torch.hstack((
-                grasped_object_nominal_control_points.to(dtype = self._float_dtype),
-                torch.ones((grasped_object_nominal_control_points.shape[0],1)).to(dtype = self._float_dtype, device = self._device)
-            )).transpose(0,1)
-            object_control_points = object_control_points.transpose(1,2)[:, :, :3]
+            T_world_to_eef = torch.matmul(self._world_to_robot_base, self.ee_pose[:, ])
+            T_eef_to_obj_ctrl_pts = torch.matmul(grasped_object_grasp_T_object, grasped_object_nominal_control_points)
+            T_world_to_obj_ctrl_pts = torch.matmul(T_world_to_eef, T_eef_to_obj_ctrl_pts)
+            object_control_points = T_world_to_obj_ctrl_pts[:, :, :3, 3]
             control_points = torch.cat((robot_control_points, object_control_points), dim=1)
         else:
             control_points = robot_control_points

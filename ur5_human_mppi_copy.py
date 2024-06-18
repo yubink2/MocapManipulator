@@ -38,8 +38,8 @@ class HumanDemo():
     def __init__(self):
         self.obstacles = []
 
-        # self.bc = BulletClient(connection_mode=p.GUI)
-        self.bc = BulletClient(connection_mode=p.DIRECT)
+        self.bc = BulletClient(connection_mode=p.GUI)
+        # self.bc = BulletClient(connection_mode=p.DIRECT)
         self.bc.setAdditionalSearchPath(pybullet_data.getDataPath())
         self.bc.configureDebugVisualizer(self.bc.COV_ENABLE_Y_AXIS_UP, 1)
         self.bc.setGravity(0, -9.8, 0) 

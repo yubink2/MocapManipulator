@@ -41,7 +41,7 @@ class TrajectoryPlanner:
     def __init__(
         self,
         mppi_H_clamp,
-        robot_base_to_world,
+        world_to_robot_base,
         joint_limits: List[np.ndarray],
         robot_urdf_location: str = 'resources/panda/panda.urdf',
         scene_urdf_location: str = 'resources/environment/environment.urdf',
@@ -98,7 +98,8 @@ class TrajectoryPlanner:
         self.clamp_by_human = clamp_by_human
 
         # Initialize robot base to world transformation matrix
-        self.robot_base_to_world = robot_base_to_world
+        self.world_to_robot_base = world_to_robot_base
+        self.float_dtype = torch.float32
     
     def _mppi_dynamics(
         self,
@@ -248,7 +249,7 @@ class TrajectoryPlanner:
             gripper_state = self._gripper_state,
             control_points_json = self._control_points_location,
             device = self._device,
-            robot_base_to_world = self.robot_base_to_world,
+            world_to_robot_base = self.world_to_robot_base,
         )
 
         # Define MPPI object
@@ -330,10 +331,12 @@ class TrajectoryPlanner:
     def attach_to_gripper(
         self,
         object_geometry,
-        world_T_grasp: np.ndarray,
-        object_name: str,
-        object_type: str,
-        world_T_object: np.ndarray = None,
+        object_type,
+        # world_T_grasp: np.ndarray = None,
+        # object_name: str = None,
+        # world_T_object: np.ndarray = None,
+        T_eef_to_obj,
+        T_obj_to_world,
     ) -> bool:
 
         """
@@ -347,20 +350,27 @@ class TrajectoryPlanner:
         :returns: True if object is successfully attached, False otherwise
         """
 
-        # Add mesh object to collision checker
-        if object_type == "mesh":
-            # Read the mesh
-            object_mesh = o3d.io.read_triangle_mesh(object_geometry)
+        # Add control points to collision checker
+        if object_type == "pcd":
+            # Construct tensor describing grasp_T_object (T_eef_to_obj)
+            self._grasped_object_grasp_T_object = torch.from_numpy(T_eef_to_obj).to(self._device, dtype=self.float_dtype)
 
-            # Sample points on the mesh's surface
-            object_nominal_control_points = np.asarray(object_mesh.get_axis_aligned_bounding_box().get_box_points())
-            self._grasped_object_nominal_control_points = torch.from_numpy(object_nominal_control_points).to(self._device)
+            # Write point clouds (in world frame) as transforms
+            object_pcd_tensor = torch.tensor(object_geometry, device=self._device)
+            object_pcd_num = object_pcd_tensor.shape[0]
+            object_transforms = torch.zeros((object_pcd_num, 4, 4), device=self._device)
+            identity_rotation = torch.eye(3, device=self._device)
 
-            # Construct tensor describing grasp_T_object
-            grasped_object_grasp_T_object = np.linalg.inv(world_T_grasp) @ world_T_object
-            self._grasped_object_grasp_T_object = torch.from_numpy(grasped_object_grasp_T_object).to(self._device)
+            for i in range(object_pcd_num):
+                object_transforms[i, :3, :3] = identity_rotation
+                object_transforms[i, :3, 3] = object_pcd_tensor[i]
+                object_transforms[i, 3, 3] = 1.0
 
-        # TODO when given with control points
+            object_transforms.to(dtype=self.float_dtype)
+
+            # Compute grasped object control points in eef frame
+            T_obj_to_world = torch.from_numpy(T_obj_to_world).to(device=self._device, dtype=self.float_dtype)
+            self._grasped_object_nominal_control_points = torch.matmul(T_obj_to_world, object_transforms).to(device=self._device, dtype=self.float_dtype)
 
         return True
     
