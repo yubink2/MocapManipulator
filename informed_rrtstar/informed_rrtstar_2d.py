@@ -11,8 +11,13 @@ https://arxiv.org/pdf/1404.2334.pdf
 """
 import sys
 import pathlib
+import os, inspect
 
-sys.path.append(str(pathlib.Path(__file__).parent.parent.parent))
+currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+parentdir = os.path.dirname(currentdir)
+parentparentdir = os.path.dirname(os.path.dirname(currentdir))
+
+os.sys.path.insert(0, parentdir)
 
 import copy
 import math

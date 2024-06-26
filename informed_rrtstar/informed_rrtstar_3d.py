@@ -29,11 +29,10 @@ class InformedRRTStar:
 
     def __init__(self, start_config, goal_config, obstacle_list, 
                  ur5, UR5_JOINT_INDICES,
-                 expand_dis=0.8, goal_sample_rate=10, max_iter=50):
+                 expand_dis=0.5, max_iter=20000):
         self.start = Node(start_config)
         self.goal = Node(goal_config)
         self.expand_dis = expand_dis
-        self.goal_sample_rate = goal_sample_rate
         self.max_iter = max_iter
         self.node_list = None
         self.obstacle_list = obstacle_list
@@ -50,44 +49,58 @@ class InformedRRTStar:
 
     def initialize_cbest_and_tree(self, path):
         # initialize exploration tree & c_best with initial path
+        c_best = 0
+        is_complete_path = True
+        prev_node = None
         for q_idx, q in enumerate(path):
             q_node = Node(q)
             if q_idx == 0:
                 self.node_list = [self.start]
             else:
-                parent_idx = len(self.node_list) - 1
-                q_node.cost = self.node_list[parent_idx].cost + self.distance(self.node_list[parent_idx], q_node)
-                q_node.set_parent(parent_idx)
-                self.node_list[parent_idx].add_child(q_idx)
-                self.node_list.append(q_node)
+                # calculate c_best
+                c_best += self.distance(prev_node, q_node)
 
-        # re-initialize informed sampling space
-        self.informed_sampler = InformedSampler(np.array(path[-1]), np.array(path[0])) 
-        
-        # add initial path to solution set if near goal
-        last_node = self.node_list[-1]
-        last_node_idx = len(self.node_list)-1
-        if self.is_near_goal(last_node):
-            self.solution_set.add(last_node_idx)
-            self.goal_found = True
-            print('init solution_set: ', self.solution_set)
-            print(f'init traj: dist(last node, goal): {self.distance(last_node, self.goal)}')
+                # stop adding to the path once it hits collision
+                if not is_complete_path:
+                    continue
 
-        c_best = self.node_list[-1].cost
+                # if no collision, add to the node list
+                if self.steer_to(q_node, prev_node):
+                    q_node.cost = prev_node.cost + self.distance(prev_node, q_node)
+                    parent_idx = q_idx-1
+                    q_node.set_parent(parent_idx)
+                    self.node_list[parent_idx].add_child(q_idx)
+                    self.node_list.append(q_node)
+                else:
+                    is_complete_path = False
+            prev_node = q_node
+
+        if is_complete_path:
+            # add initial path to solution set if near goal
+            last_node = self.node_list[-1]
+            last_node_idx = len(self.node_list)-1
+            if self.is_near_goal(last_node):
+                self.solution_set.add(last_node_idx)
+                self.goal_found = True
+                print('init solution_set: ', self.solution_set)
+                print(f'init traj: dist(last node, goal): {self.distance(last_node, self.goal)}')
+
+        # c_best = self.node_list[-1].cost
         return c_best
 
     def plan(self, path):
+        print(f'dist(start, goal): {self.distance(self.start, self.goal)}')
+
         c_best = self.initialize_cbest_and_tree(path)
-        # for i, node in enumerate(self.node_list):
-        #     print(f'{i} node: {node.config}, cost: {node.cost}, parent: {node.parent}, children: {node.children}')
-        print('c_best: ', c_best)
-        # sys.exit()
+        print('initial c_best: ', c_best)
+        print('initial path: ', self.get_path_to_goal())
+
+        # c_best = self.distance(self.start, self.goal)   # FOR DEBUGGING
 
         rand_config = self.informed_sampler.sample(c_best)
         rand_node = Node(rand_config)
 
         for i in range(self.max_iter):
-            # print(i)
             rand_config = self.informed_sampler.sample(c_best)
             rand_node = Node(rand_config)
             nearest_node_idx, nearest_node = self.find_nearest(rand_node, self.node_list)            
@@ -100,33 +113,29 @@ class InformedRRTStar:
 
                 near_inds = self.find_near_nodes(new_node)
                 new_parent_idx = self.choose_parent(new_node, near_inds)
-                # print('near indicies: ', near_inds)
-                # print('new parent idx: ', new_parent_idx)
 
                 if new_parent_idx is not None:
                     new_node.set_parent(new_parent_idx)
                     new_node.cost = self.node_list[new_parent_idx].cost + self.distance(self.node_list[new_parent_idx], new_node)
 
                 self.node_list.append(new_node)
-                new_node_idx = len(self.node_list) - 1
+                new_node_idx = len(self.node_list)-1
                 self.node_list[new_node.parent].add_child(new_node_idx)
-
-                # print(f'new node {new_node_idx} added, its parent: {new_node.parent}, cost: {new_node.cost}')
 
                 self.rewire(new_node, new_node_idx, near_inds)
 
-                # print(f'new node {new_node_idx} after rewire, its parent: {new_node.parent}, cost: {new_node.cost}')
-
-                # if goal found
-                if self.is_near_goal(new_node):
-                    self.solution_set.add(new_node_idx)
+                if self.is_near_goal(new_node) and self.steer_to(new_node, self.goal):
                     self.goal_found = True
+                    self.solution_set.add(new_node_idx)
+                    print('iter: ', i)
                     print('solution_set: ', self.solution_set)
-                    print(f'dist(new node, goal): {self.distance(new_node, self.goal)}')
+                    print('new_node.cost: ', new_node.cost)
 
-        # for i, node in enumerate(self.node_list):
-        #     print(f'{i} node: {node.config}, cost: {node.cost}, parent: {node.parent}, children: {node.children}')
-        # print('c_best: ', c_best)
+                    # update c_best
+                    if new_node.cost < c_best:
+                        c_best = new_node.cost
+                        print('c_best: ', c_best)
+
         return self.get_path_to_goal()
 
     def distance(self, node1, node2):
@@ -262,16 +271,18 @@ class InformedRRTStar:
             print(f'goal idx: {goal_idx}')
             return self.gen_final_course(goal_idx)
         else:
-            goal_idx = None
-            min_dist = float('inf')
-            for idx, node in enumerate(self.node_list):
-                dist_to_goal = self.distance(node, self.goal)
-                if goal_idx is None or dist_to_goal < min_dist:
-                    goal_idx = idx
-                    min_dist = dist_to_goal
-            print(f'goal idx: {goal_idx}')
-            print(f'cost: {self.node_list[goal_idx].cost}')
-            return self.gen_final_course(goal_idx)
+            # goal_idx = None
+            # min_dist = float('inf')
+            # for idx, node in enumerate(self.node_list):
+            #     dist_to_goal = self.distance(node, self.goal)
+            #     if goal_idx is None or dist_to_goal < min_dist:
+            #         goal_idx = idx
+            #         min_dist = dist_to_goal
+            # print(f'goal idx: {goal_idx}')
+            # print(f'cost: {self.node_list[goal_idx].cost}')
+            # return self.gen_final_course(goal_idx)
+            print('path to goal has not been found!')
+            return []
         
     def gen_final_course(self, goal_idx):
         """
@@ -282,17 +293,14 @@ class InformedRRTStar:
         Returns: a list of coordinates, representing the path backwards. Traverse this list in reverse order to follow the path from start to end
         """
         path = [self.goal.config]
-        # print('path ', path)
         
         while self.node_list[goal_idx].parent is not None:
-            # TODO check if parent is set correctly.. infinite loop?
             node = self.node_list[goal_idx]
             path.append(node.config)
             goal_idx = node.parent
-            # print('path ', path)
         path.append(self.start.config)
-        # print('** path ', path)
-        return path
+        return path[::-1]  # return reversed path. start --> goal
+
 
 class Node:
 

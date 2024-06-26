@@ -181,7 +181,7 @@ class TrajectoryPlanner:
         mppi_lambda: float = 1.0,
         mppi_cost_weight_convergence = 1000.0,
         mppi_cost_weight_path_length = 200.0,
-        mppi_cost_weight_collision = 500.0,
+        mppi_cost_weight_collision = 700.0,
         mppi_consider_obstacle_collisions: bool = True,
         waypoint_density: int = 10,
         action_smoothing: float = 0.5,

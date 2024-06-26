@@ -76,8 +76,13 @@ class CollisionCost(nn.Module):
                     # print('*ctlr_point_list: ', ctrl_point_list)
                     self.control_points[link_name] = []
                     for ctrl_point in ctrl_point_list:
-                        ctrl_pose_link_frame = torch.eye(4, device = self._device, dtype = self._float_dtype)
-                        ctrl_pose_link_frame[:3,3] = torch.tensor(ctrl_point, device = self._device, dtype = self._float_dtype)
+                        # ### 1
+                        # ctrl_pose_link_frame = torch.eye(4, device = self._device, dtype = self._float_dtype)
+                        # ctrl_pose_link_frame[:3,3] = torch.tensor(ctrl_point, device = self._device, dtype = self._float_dtype)
+
+                        ### 2
+                        ctrl_pose_link_frame = torch.tensor(ctrl_point, device = self._device, dtype = self._float_dtype)
+
                         self.control_points[link_name].append(ctrl_pose_link_frame)
                     self.control_points[link_name] = torch.stack(self.control_points[link_name])
         except FileNotFoundError:
@@ -121,13 +126,10 @@ class CollisionCost(nn.Module):
         :returns: List of control points on the robot manipulator (BATCH_SIZE x CONTROL_POINTS x 3)
         """
         batch_size = state.shape[0]
-
-        # Default gripper state - set to [0.0, 0.0]
-        gripper_state = torch.Tensor([0.0, 0.0, 0.0, 0.0]).to(self._device)
         num_control_points = sum(map(len, self.control_points.values()))
 
         # Find link locations after stacking robot configuration with gripper state
-        augmented_robot_state = torch.cat((state, torch.tile(gripper_state, (batch_size, 1))), dim=1)
+        augmented_robot_state = torch.cat((state, torch.tile(self._gripper_state, (batch_size, 1))), dim=1)
         link_transformations = self._differentiable_model.forward_kinematics(augmented_robot_state, end_only=False)
         # Link transformations is a dict with keys being link names, value is BATCH x 4 x 4
 

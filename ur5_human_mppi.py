@@ -40,11 +40,18 @@ from utils.point_cloud_utils import *
 # from contact_graspnet_pytorch.contact_graspnet_pytorch.inference import *
 from utils.grasp_utils import *
 
+# informed rrt star
+from informed_rrtstar.informed_rrtstar_3d import InformedRRTStar
+from utils.collision_utils import get_collision_fn
+
+
 # urdf paths
 robot_urdf_location = 'pybullet_ur5/urdf/ur5_robotiq_85.urdf'
 scene_urdf_location = 'resources/environment/environment.urdf'
-control_points_location = 'resources/ur5_control_points/control_points.json'
-control_points_number = 28
+# control_points_location = 'resources/ur5_control_points/control_points.json'
+# control_points_number = 28
+control_points_location = 'resources/ur5_control_points/T_control_points.json'
+control_points_number = 55
 
 # UR5 parameters
 LINK_FIXED = 'base_link'
@@ -86,25 +93,12 @@ class HumanDemo():
         self.human_rest_poses = [2.4790802489002552, -0.01642306738465106, -1.8128412472566666, 0.4529190452054409]
 
         # initial and target human arm
-        # self.q_human_init = [3.1, 1.57, -1.8, 0]
-        # self.q_human_goal = [3.0, 1.57, -2.6, 0]
         self.q_human_init = [-1.4, 3.1, 0, 0.1]
         self.q_human_goal = [0, 3.1, 0, 0.1]
 
-        # move human to initial config
-        self.reset_human_arm(self.q_human_goal)
-        self.bc.stepSimulation()
-
-        # ###### CAMERA
-        # # TODO get camera image
-        # T_world_to_camera = self.get_camera_img()
-        # # T_world_to_camera_opengl = np.array(world_to_camera).reshape(4,4)
-        # # T_world_to_camera = convert_opengl_to_pybullet(T_world_to_camera)
-
-        # # world_to_camera_pos = translation_from_matrix(T_world_to_camera)
-        # # world_to_camera_orn = quaternion_from_matrix(T_world_to_camera)
-        # # draw_frame(self, position=world_to_camera_pos, quaternion=world_to_camera_orn)
-        # ######
+        # # move human to initial config
+        # self.reset_human_arm(self.q_human_goal)
+        # self.bc.stepSimulation()
 
         # load robot
         self.robot_base_pose = ((0.5, 0.7, 0), (0, 0, 0))
@@ -113,26 +107,6 @@ class HumanDemo():
         self.robot.load()
         self.robot.reset()
         self.robot.open_gripper()
-
-        # ###### CAMERA DEBUGGING
-        # opencv_transform = np.array(
-        #                     [[-1.0625173 , -0.04646944, -0.00432264, -0.3530373 ],
-        # [ 0.03481567, -0.8581184 ,  0.5898501 ,  0.22013798],
-        # [-0.03111935,  0.62657547,  0.80750114,  0.8974285 ],
-        # [ 0.        ,  0.        ,  0.        ,  1.        ]]
-        #                     )
-
-        # # Convert to PyBullet coordinates
-        # T_camera_to_grasp = convert_opencv_to_pybullet(opencv_transform)
-
-        # # Transform the OpenCV matrix to pybullet coordinates
-        # T_world_to_grasp = T_world_to_camera @ T_camera_to_grasp
-        
-        # pos = translation_from_matrix(T_world_to_grasp)
-        # orn = quaternion_from_matrix(T_world_to_grasp)
-        
-        # draw_frame(self, position=pos, quaternion=orn)
-        # ######
 
         # load second robot
         self.robot_2_base_pose = ((-0.5, 0.5, 0), (0, 0, 0))
@@ -150,23 +124,42 @@ class HumanDemo():
             self.reset_robot(self.robot_2, self.q_robot_2)
             self.bc.stepSimulation()
 
+        # # add sphere obstacle
+        # sphere_pos1 = (0.15, 0.5, 0.5)
+        # sphere_pos2 = (0.17, 0.3, 0.8)
+        # self.sphere1 = self.draw_sphere_marker(sphere_pos1, radius=0.05)
+        # self.sphere2 = self.draw_sphere_marker(sphere_pos2, radius=0.05)
+
+        # # get point cloud
+        # point_cloud = []
+        # # point_cloud.extend(get_point_cloud_from_visual_shapes(self.robot.id))
+        # point_cloud.extend(get_point_cloud_from_visual_shapes(self.sphere1))
+        # point_cloud.extend(get_point_cloud_from_visual_shapes(self.sphere2))
+        # # point_cloud.extend(get_point_cloud_from_visual_shapes(bed_id))
+        # self.obs_pcd = np.array(point_cloud)
+
         # ### DEBUGGING
         # draw_control_points(self)
 
-        # initialize obstacles
+        # # initialize obstacles
         self.obstacles = []
         self.obstacles.append(bed_id)
         self.obstacles.append(self.robot_2.id)
+        self.obstacles.append(self.humanoid._humanoid)
+        # self.obstacles.append(self.sphere2)
 
         # get obstacle point cloud
         self.obs_pcd = self.get_obstacle_point_cloud(self.obstacles)
         self.visualize_point_cloud(self.obs_pcd)
 
-        # # TODO call inference.py to get grasps
-
         # initialize robot config
         self.init_robot_configs()
         self.set_robot_target_joint()
+
+        # initialize collision checker
+        self.collision_fn = get_collision_fn(self.robot.id, self.robot.arm_controllable_joints, obstacles=self.obstacles,
+                                       attachments=[], self_collisions=True,
+                                       disabled_collisions=set())
 
     def init_robot_configs(self):
         # initial human arm and reset robot config
@@ -338,6 +331,11 @@ class HumanDemo():
         print("planning time : ", time.time()-start_time)
         return trajectory
     
+    def init_informed_rrtstar_planner(self, current_joint_angles, target_joint_angles, traj):
+        self.informed_rrtstar_planner = InformedRRTStar(current_joint_angles, target_joint_angles, self.obstacles,
+                                                        self.robot.id, self.robot.arm_controllable_joints)
+        return self.informed_rrtstar_planner.plan(traj)
+    
     ### CAMERA IMAGE
     def get_camera_img(self):
         ### Desired image size and intrinsic camera parameters
@@ -475,7 +473,8 @@ class HumanDemo():
 
     def draw_sphere_marker(self, position, radius=0.07, color=[1, 0, 0, 1]):
         vs_id = self.bc.createVisualShape(p.GEOM_SPHERE, radius=radius, rgbaColor=color)
-        marker_id = self.bc.createMultiBody(basePosition=position, baseCollisionShapeIndex=-1, baseVisualShapeIndex=vs_id)
+        col_id = self.bc.createCollisionShape(p.GEOM_SPHERE, radius=radius)
+        marker_id = self.bc.createMultiBody(basePosition=position, baseCollisionShapeIndex=col_id, baseVisualShapeIndex=vs_id)
         return marker_id 
 
     def human_motion_from_frame_data(self, humanoid, motion, utNum):
@@ -533,7 +532,7 @@ if __name__ == '__main__':
     for _ in range(100):
         env.reset_robot(env.robot_2, env.q_robot_2)
         env.reset_robot(env.robot, env.q_R_goal_before_grasp)
-        env.reset_human_arm(env.q_human_init)
+        # env.reset_human_arm(env.q_human_init)
         env.bc.stepSimulation()
 
     # # # Step 2: attach human arm to eef
@@ -544,20 +543,99 @@ if __name__ == '__main__':
     traj = env.init_mppi_planner(env.q_R_init_after_grasp, env.q_R_goal_after_grasp, clamp_by_human=False)
     print(traj)
 
-    # # Step 4: detach human arm
-    env.reset_human_arm(env.q_human_goal)
-    env.bc.stepSimulation()
-    # env.deattach_human_arm_from_eef()
+    # # # Step 4: detach human arm
+    # env.reset_human_arm(env.q_human_goal)
     # env.bc.stepSimulation()
+    # # env.deattach_human_arm_from_eef()
+    # # env.bc.stepSimulation()
+    # time.sleep(2)
+
 
     for q in traj:
         for _ in range (300):
             env.reset_robot(env.robot_2, env.q_robot_2)
             env.move_robot(env.robot, q)
             env.bc.stepSimulation()
+        # check for collision
+        if env.collision_fn(q):
+            print('collision!')
         time.sleep(0.5)
 
     for i, joint_id in enumerate(env.robot.arm_controllable_joints):
         print(i, env.bc.getJointState(env.robot.id, joint_id)[0])
 
-    time.sleep(4)
+
+    # traj = [[-3.11386739e+00, -1.76164691e+00,  1.22416424e+00, -9.02148110e-01,
+    #         4.29139712e-04,  1.44108175e+00],
+    #         [-3.02930256e+00, -1.85107927e+00 , 1.25371818e+00 ,-9.13523133e-01,
+    #         -7.61459340e-02,  1.56562846e+00],
+    #         [-2.97705818e+00, -1.87156734e+00  ,1.19430375e+00 ,-9.55770389e-01,
+    #         -2.17730051e-01,  1.66687387e+00],
+    #         [-2.97786049e+00, -1.82880447e+00  ,1.09617021e+00 ,-1.01394482e+00,
+    #         -3.66203472e-01,  1.71600753e+00],
+    #         [-2.98104626e+00, -1.84668776e+00  ,1.11795089e+00 ,-1.08453633e+00,
+    #         -5.13580688e-01,  1.81942949e+00],
+    #         [-2.96571295e+00, -1.84644592e+00  ,1.09028789e+00 ,-1.16176760e+00,
+    #         -6.66586610e-01,  1.91575805e+00],
+    #         [-2.92668811e+00, -1.82006348e+00  ,9.96716407e-01 ,-1.23314637e+00,
+    #         -7.97124254e-01,  1.98257166e+00],
+    #         [-2.86032357e+00, -1.82221192e+00  ,8.86122076e-01 ,-1.28758753e+00,
+    #         -9.21289069e-01,  2.05231226e+00],
+    #         [-2.75466568e+00, -1.82010616e+00  ,8.07137025e-01 ,-1.27900833e+00,
+    #         -1.02543020e+00,  2.15902463e+00],
+    #         [-2.69048092e+00, -1.74320623e+00  ,7.83813966e-01 ,-1.27842710e+00,
+    #         -1.14108037e+00,  2.28495985e+00],
+    #         [-2.65527328e+00, -1.63406321e+00  ,8.59301162e-01 ,-1.41809050e+00,
+    #         -1.16436828e+00,  2.30464640e+00],
+    #         [-2.56695437e+00, -1.54918346e+00  ,9.01788390e-01 ,-1.56339883e+00,
+    #         -1.17837075e+00,  2.33550639e+00],
+    #         [-2.42963411e+00, -1.51268728e+00  ,8.75448948e-01 ,-1.65558025e+00,
+    #         -1.26835904e+00,  2.36422273e+00],
+    #         [-2.32878629e+00, -1.49335571e+00  ,8.39883020e-01 ,-1.70037665e+00,
+    #         -1.42715402e+00,  2.35313858e+00],
+    #         [-2.26123644e+00, -1.37850816e+00  ,8.40335174e-01 ,-1.81531153e+00,
+    #         -1.35787235e+00,  2.28914850e+00],
+    #         [-2.25349430e+00, -1.26347144e+00  ,9.30423135e-01 ,-1.72420691e+00,
+    #         -1.39288734e+00,  2.37010116e+00],
+    #         [-2.24747889e+00, -1.15453862e+00  ,1.01857040e+00 ,-1.63090209e+00,
+    #         -1.43123148e+00,  2.45186182e+00],
+    #         [-2.24597504e+00, -1.12730542e+00  ,1.04060721e+00 ,-1.60757588e+00,
+    #         -1.44081752e+00,  2.47230199e+00]]
+
+
+    # for q in traj:
+    #     for _ in range (300):
+    #         env.reset_robot(env.robot_2, env.q_robot_2)
+    #         env.move_robot(env.robot, q)
+    #         env.bc.stepSimulation()
+    #     # check for collision
+    #     if env.collision_fn(q):
+    #         print('collision!')
+    #         print(q)
+    #     time.sleep(0.5)
+
+    # Step 5: trajectory by informed rrtstar
+    for _ in range(100):
+        env.reset_robot(env.robot_2, env.q_robot_2)
+        env.reset_robot(env.robot, env.q_R_init_after_grasp)
+        # env.reset_human_arm(env.q_human_goal)
+        env.bc.stepSimulation()
+
+    traj2 = env.init_informed_rrtstar_planner(env.q_R_init_after_grasp, env.q_R_goal_after_grasp, traj)
+    print('informed rrtstar planner done')
+    print(traj2)
+
+    for q in traj2:
+        for _ in range (300):
+            env.reset_robot(env.robot_2, env.q_robot_2)
+            env.move_robot(env.robot, q)
+            env.bc.stepSimulation()
+            # check for collision
+        if env.collision_fn(q):
+            print('collision!')
+            time.sleep(3)
+        time.sleep(0.5)
+
+    for i, joint_id in enumerate(env.robot.arm_controllable_joints):
+        print(i, env.bc.getJointState(env.robot.id, joint_id)[0])
+

@@ -266,28 +266,28 @@ if __name__ == '__main__':
 
     time.sleep(3)
 
-    for q in traj:
-        for _ in range (300):
-            for i, joint_id in enumerate(env.robot.arm_controllable_joints):
-                env.bc.setJointMotorControl2(env.robot.id, joint_id, p.POSITION_CONTROL, q[i],
-                                            force=500)
-            env.bc.stepSimulation()
-        time.sleep(0.5)
-
-    for i, joint_id in enumerate(env.robot.arm_controllable_joints):
-        print(i, env.bc.getJointState(env.robot.id, joint_id)[0])
-
-    time.sleep(5)
-
-
-    # ### TEST TRAJ FOLLOWER
-    # env.init_traj_follower()
-    # env.trajectory_follower.update_trajectory(traj)
-    # velocity_command = env.trajectory_follower.follow_trajectory(env.current_joint_angles)
-    # print('follower velocity command')
-    # print(velocity_command)
-
-    # while True:
-    #     for q in velocity_command:
-    #         env.move_robot(q)
+    # for q in traj:
+    #     for _ in range (300):
+    #         for i, joint_id in enumerate(env.robot.arm_controllable_joints):
+    #             env.bc.setJointMotorControl2(env.robot.id, joint_id, p.POSITION_CONTROL, q[i],
+    #                                         force=500)
     #         env.bc.stepSimulation()
+    #     time.sleep(0.5)
+
+    # for i, joint_id in enumerate(env.robot.arm_controllable_joints):
+    #     print(i, env.bc.getJointState(env.robot.id, joint_id)[0])
+
+    # time.sleep(5)
+
+
+    ### TEST TRAJ FOLLOWER
+    env.init_traj_follower()
+    env.trajectory_follower.update_trajectory(traj)
+    velocity_command = env.trajectory_follower.follow_trajectory(env.current_joint_angles)
+    print('follower velocity command')
+    print(velocity_command)
+
+    while True:
+        for q in velocity_command:
+            env.move_robot(q)
+            env.bc.stepSimulation()
