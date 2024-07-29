@@ -41,7 +41,7 @@ class CollisionCost(nn.Module):
         link_skeleton: str,
         gripper_state: torch.Tensor,
         control_points_json: str = None,
-        distance_threshold: float = 0.05,
+        distance_threshold: float = 0.03,
         gaussian_params: dict = {'n':0,'c':0,'s':0,'r':0},
         device: torch.device = torch.device('cpu'),
         float_dtype: torch.dtype = torch.float32,
@@ -130,7 +130,7 @@ class CollisionCost(nn.Module):
 
         # Find link locations after stacking robot configuration with gripper state
         augmented_robot_state = torch.cat((state, torch.tile(self._gripper_state, (batch_size, 1))), dim=1)
-        link_transformations = self._differentiable_model.forward_kinematics(augmented_robot_state, end_only=False)
+        link_transformations = self._differentiable_model.forward_kinematics(state, end_only=False)
         # Link transformations is a dict with keys being link names, value is BATCH x 4 x 4
 
         # Find end effector poses (w.r.t. robot base)

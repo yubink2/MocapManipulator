@@ -265,6 +265,12 @@ class Humanoid(object):
                                                        globalScaling=0.22,
                                                        useFixedBase=True)
 
+    # self._humanoid = self._pybullet_client.loadURDF("urdf/humanoid_with_rev_scaled.urdf", [0, 0.9, 0],
+    #                                                 useFixedBase=True)
+
+    # self._kinematicHumanoid = self.kin_client.loadURDF("urdf/humanoid_with_rev_scaled.urdf", [0, 0.9, 0],
+    #                                                    useFixedBase=True)
+
     pose = HumanoidPose()
 
     for i in range(self._motion_data.NumFrames() - 1):
@@ -274,12 +280,13 @@ class Humanoid(object):
     self._pybullet_client.resetBasePositionAndOrientation(self._humanoid, self._baseShift, self._ornShift)
     self._pybullet_client.changeDynamics(self._humanoid, -1, linearDamping=0, angularDamping=0)
     
-    for j in range(self._pybullet_client.getNumJoints(self._humanoid)):  # change colors of the human model limbs
+    # change colors of the human model limbs
+    humanoid_color = [255/255, 160/255, 45/255, 1] # [255/255, 192/255, 0/255, 1]
+    # bed: 0.92, 0.9, 0.88
+    for j in range(self._pybullet_client.getNumJoints(self._humanoid)):  
       ji = self._pybullet_client.getJointInfo(self._humanoid, j)
       self._pybullet_client.changeDynamics(self._humanoid, j, linearDamping=0, angularDamping=0)
-      self._pybullet_client.changeVisualShape(self._humanoid, j, rgbaColor=[1, 1, 1, 1])
-      # print("joint[",j,"].type=",jointTypes[ji[2]])
-      # print("joint[",j,"].name=",ji[1])
+      self._pybullet_client.changeVisualShape(self._humanoid, j, rgbaColor=humanoid_color)
 
     self._initial_state = self._pybullet_client.saveState()
     self._allowed_body_parts = [11, 14]

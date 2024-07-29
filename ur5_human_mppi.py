@@ -37,7 +37,8 @@ import open3d as o3d
 from utils.point_cloud_utils import *
 
 # # contact graspnet
-# from contact_graspnet_pytorch.contact_graspnet_pytorch.inference import *
+from contact_graspnet_pytorch.contact_graspnet_pytorch.inference import inference
+from contact_graspnet_pytorch.contact_graspnet_pytorch.config_utils import load_config
 from utils.grasp_utils import *
 
 # informed rrt star
@@ -72,11 +73,11 @@ class HumanDemo():
         self.bc = BulletClient(connection_mode=p.GUI)
         self.bc.setAdditionalSearchPath(pybullet_data.getDataPath())
         self.bc.setGravity(0, 0, -9.8) 
-        self.bc.setTimestep = 0.0005
+        self.bc.setTimestep = 0.05
 
         # load environment
         plane_id = self.bc.loadURDF("plane.urdf", (0, -0.04, 0))
-        bed_id = self.bc.loadURDF("./urdf/bed_0.urdf", (0.0, 0, 0.0), useFixedBase=True)  # bed
+        self.bed_id = self.bc.loadURDF("./urdf/bed_0.urdf", (0.0, -0.1, 0.0), useFixedBase=True)  # bed
         self.cid = None
 
         # load human
@@ -89,16 +90,24 @@ class HumanDemo():
         self.right_shoulder_y = 3
         self.right_shoulder_p = 4
         self.right_shoulder_r = 5
+        self.right_shoulder = 6
         self.right_elbow = 7
+        self.right_wrist = 8
         self.human_rest_poses = [2.4790802489002552, -0.01642306738465106, -1.8128412472566666, 0.4529190452054409]
 
         # initial and target human arm
         self.q_human_init = [-1.4, 3.1, 0, 0.1]
         self.q_human_goal = [0, 3.1, 0, 0.1]
 
-        # # move human to initial config
-        # self.reset_human_arm(self.q_human_goal)
-        # self.bc.stepSimulation()
+        # compute human transforms for constraint func
+        human_base = self.bc.getBasePositionAndOrientation(self.humanoid._humanoid)[:2]
+        self.T_world_to_human_base = compute_matrix(translation=human_base[0], rotation=human_base[1])
+        right_elbow_pose = self.bc.getLinkState(self.humanoid._humanoid, self.right_elbow)[4:6]
+        right_elbow_pose_inverse = self.bc.invertTransform(right_elbow_pose[0], right_elbow_pose[1])
+        cp_pose = self.bc.getLinkState(self.humanoid._humanoid, self.right_elbow)[:2]
+        right_elbow_to_cp = self.bc.multiplyTransforms(right_elbow_pose_inverse[0], right_elbow_pose_inverse[1],
+                                                       cp_pose[0], cp_pose[1])
+        self.T_right_elbow_to_cp = compute_matrix(translation=right_elbow_to_cp[0], rotation=right_elbow_to_cp[1])
 
         # load robot
         self.robot_base_pose = ((0.5, 0.7, 0), (0, 0, 0))
@@ -107,6 +116,130 @@ class HumanDemo():
         self.robot.load()
         self.robot.reset()
         self.robot.open_gripper()
+
+        # initialize robot parameters
+        world_to_eef = self.bc.getLinkState(self.robot.id, self.robot.eef_id)[:2]
+        world_to_eef_grasp = [
+                [world_to_eef[0][0], world_to_eef[0][1], world_to_eef[0][2]-0.06],
+                world_to_eef[1]
+            ]
+        eef_grasp_to_world = self.bc.invertTransform(world_to_eef_grasp[0], world_to_eef_grasp[1])
+        eef_grasp_to_eef = self.bc.multiplyTransforms(eef_grasp_to_world[0], eef_grasp_to_world[1],
+                                                           world_to_eef[0], world_to_eef[1])
+        self.eef_grasp_to_eef = eef_grasp_to_eef
+
+        ######### DEBUGGING GRASPS
+        # init human arm and get its point cloud
+        # # self.reset_human_arm(self.q_human_init)
+        # right_elbow_pcd = get_point_cloud_from_collision_shapes_specific_link(self.humanoid._humanoid, self.right_elbow, resolution=20)
+        # right_wrist_pcd = get_point_cloud_from_collision_shapes_specific_link(self.humanoid._humanoid, self.right_wrist, resolution=20)
+        # pcd = np.vstack((right_elbow_pcd, right_wrist_pcd))
+        # dict = {'xyz': pcd}
+        # np.save("pc_human_arm.npy", dict)
+
+        # # compute grasps
+        # global_config = load_config(checkpoint_dir="contact_graspnet_pytorch/checkpoints/contact_graspnet", batch_size=1, arg_configs=[])
+        # inference(global_config=global_config, 
+        #           ckpt_dir="contact_graspnet_pytorch/checkpoints/contact_graspnet",
+        #           input_paths="pc_human_arm.npy", visualize_results=False)
+        grasp_results = np.load("results/predictions_pc_human_arm.npz", allow_pickle=True)
+        pred_grasps_cam = grasp_results['pred_grasps_cam'].item()
+        scores = grasp_results['scores'].item()
+        pred_grasps_cam_values = list(pred_grasps_cam.values())[0]
+        scores_values = list(scores.values())[0]
+
+        # compute x_range, y_range, z_range
+        right_elbow_world_pos = np.array(self.bc.getLinkState(self.humanoid._humanoid, self.right_elbow)[0])
+        right_elbow_link_pos = np.array(self.bc.getLinkState(self.humanoid._humanoid, self.right_elbow)[4])
+        right_elbow_diff = np.abs(right_elbow_world_pos-right_elbow_link_pos)
+        sorted_indices = np.argsort(right_elbow_diff)
+        smallest_two_indices = sorted_indices[:2]
+        other_index = sorted_indices[-1]
+
+        if 0 in smallest_two_indices:
+            x_range = [right_elbow_world_pos[0], right_elbow_world_pos[0]+0.15]
+        if 1 in smallest_two_indices:
+            y_range = [right_elbow_world_pos[1]-0.15, right_elbow_world_pos[1]+0.15]
+        if 2 in smallest_two_indices:
+            z_range = [right_elbow_world_pos[2]-0.15, right_elbow_world_pos[2]+0.15]
+
+        if 0 == other_index:
+            x_range = [right_elbow_world_pos[0]-0.01, right_elbow_world_pos[0]+right_elbow_diff[0]/6]
+        if 1 == other_index:
+            y_range = [right_elbow_world_pos[1]-0.01, right_elbow_world_pos[1]+right_elbow_diff[1]/6]
+        if 2 == other_index:
+            z_range = [right_elbow_world_pos[2]-0.01, right_elbow_world_pos[2]+right_elbow_diff[2]/6]
+
+        # filter matrices based on the ranges
+        filtered_matrices, filtered_indices = filter_transform_matrices_by_position(pred_grasps_cam_values, x_range, y_range, z_range)
+        top_indices = np.argsort(scores_values[filtered_indices])[-5:][::-1]
+        top_transformation_matrices = pred_grasps_cam_values[top_indices]
+        print(f'filtered grasps: {len(top_transformation_matrices)}')
+
+        # rotate matrices by 'y' axis
+        world_to_right_elbow = self.bc.getLinkState(self.humanoid._humanoid, self.right_elbow)[:2]
+        right_elbow_to_world = self.bc.invertTransform(world_to_right_elbow[0], world_to_right_elbow[1])
+        
+        grasp_samples = []
+        for i in range(len(top_transformation_matrices)):
+            # position = top_transformation_matrices[i][:3,3]
+            # quaternion = quaternion_from_matrix(top_transformation_matrices[i][:3,:3])
+
+            # # rotate matrices by 'y' axis of human arm
+            # right_elbow_to_grasp = self.bc.multiplyTransforms(right_elbow_to_world[0], right_elbow_to_world[1],
+            #                                                   position, quaternion)
+            # world_to_right_elbow_rotated = [world_to_right_elbow[0], rotate_quaternion_by_axis(world_to_right_elbow[1], axis='y', degrees=180)]
+            # world_to_grasp_rotated = self.bc.multiplyTransforms(world_to_right_elbow_rotated[0], world_to_right_elbow_rotated[1],
+            #                                                     right_elbow_to_grasp[0], right_elbow_to_grasp[1])
+
+            # # rotate matrices such that panda eef --> ur5 eef
+            # position = world_to_grasp_rotated[0]
+            # quaternion = world_to_grasp_rotated[1]
+            # quaternion = rotate_quaternion_by_axis(quaternion, axis='y', degrees=-90)
+            # quaternion_1 = rotate_quaternion_by_axis(quaternion, axis='x', degrees=180)
+            # quaternion_2 = rotate_quaternion_by_axis(quaternion, axis='x', degrees=-90)
+            # draw_frame(self, position=position, quaternion=quaternion_1)
+
+            # grasp_samples.append([list(position), list(quaternion_1)])
+            # grasp_samples.append([list(position), list(quaternion_2)])
+
+            # append more grasps for human arm in this axis
+            if 0 == other_index:
+                position = top_transformation_matrices[i][:3,3]
+                quaternion = quaternion_from_matrix(top_transformation_matrices[i][:3,:3])
+
+                # rotate matrices by 'y' axis of human arm
+                right_elbow_to_grasp = self.bc.multiplyTransforms(right_elbow_to_world[0], right_elbow_to_world[1],
+                                                                position, quaternion)
+                world_to_right_elbow_rotated = [world_to_right_elbow[0], rotate_quaternion_by_axis(world_to_right_elbow[1], axis='y', degrees=90)]
+                world_to_grasp_rotated = self.bc.multiplyTransforms(world_to_right_elbow_rotated[0], world_to_right_elbow_rotated[1],
+                                                                    right_elbow_to_grasp[0], right_elbow_to_grasp[1])
+
+                # rotate matrices such that panda eef --> ur5 eef
+                position = world_to_grasp_rotated[0]
+                quaternion = world_to_grasp_rotated[1]
+                quaternion = rotate_quaternion_by_axis(quaternion, axis='y', degrees=-90)
+                quaternion_1 = rotate_quaternion_by_axis(quaternion, axis='x', degrees=180)
+                quaternion_2 = rotate_quaternion_by_axis(quaternion, axis='x', degrees=-90)
+                draw_frame(self, position=position, quaternion=quaternion_1)
+
+                grasp_samples.append([list(position), list(quaternion_1)])
+                grasp_samples.append([list(position), list(quaternion_2)])
+
+        for grasp in grasp_samples:
+            world_to_eef = self.bc.multiplyTransforms(grasp[0], grasp[1],
+                                                      self.eef_grasp_to_eef[0], self.eef_grasp_to_eef[1])
+            q_R_grasp = self.bc.calculateInverseKinematics(self.robot.id, self.robot.eef_id, 
+                                                       world_to_eef[0], world_to_eef[1],
+                                                    #    grasp[0], grasp[1],
+                                                       self.robot.arm_lower_limits, self.robot.arm_upper_limits, self.robot.arm_joint_ranges, self.robot.arm_rest_poses,
+                                                       maxNumIterations=20)
+            q_R_grasp_test = [q_R_grasp[i] for i in range(len(self.robot.arm_controllable_joints))]
+            self.reset_robot(self.robot, q_R_grasp_test)
+            print('')
+
+        print('here')
+        #########
 
         # load second robot
         self.robot_2_base_pose = ((-0.5, 0.5, 0), (0, 0, 0))
@@ -124,33 +257,14 @@ class HumanDemo():
             self.reset_robot(self.robot_2, self.q_robot_2)
             self.bc.stepSimulation()
 
-        # # add sphere obstacle
-        # sphere_pos1 = (0.15, 0.5, 0.5)
-        # sphere_pos2 = (0.17, 0.3, 0.8)
-        # self.sphere1 = self.draw_sphere_marker(sphere_pos1, radius=0.05)
-        # self.sphere2 = self.draw_sphere_marker(sphere_pos2, radius=0.05)
-
-        # # get point cloud
-        # point_cloud = []
-        # # point_cloud.extend(get_point_cloud_from_visual_shapes(self.robot.id))
-        # point_cloud.extend(get_point_cloud_from_visual_shapes(self.sphere1))
-        # point_cloud.extend(get_point_cloud_from_visual_shapes(self.sphere2))
-        # # point_cloud.extend(get_point_cloud_from_visual_shapes(bed_id))
-        # self.obs_pcd = np.array(point_cloud)
-
-        # ### DEBUGGING
-        # draw_control_points(self)
-
         # # initialize obstacles
         self.obstacles = []
-        self.obstacles.append(bed_id)
+        self.obstacles.append(self.bed_id)
         self.obstacles.append(self.robot_2.id)
-        self.obstacles.append(self.humanoid._humanoid)
-        # self.obstacles.append(self.sphere2)
+        # self.obstacles.append(self.humanoid._humanoid)
 
-        # get obstacle point cloud
+        # get 'static' obstacle point cloud
         self.obs_pcd = self.get_obstacle_point_cloud(self.obstacles)
-        self.visualize_point_cloud(self.obs_pcd)
 
         # initialize robot config
         self.init_robot_configs()
@@ -192,6 +306,7 @@ class HumanDemo():
         print('q_R_init_before_grasp', self.q_R_init_before_grasp)
         
         # pos_up
+        draw_frame(self, pos_up, orn)
         current_joint_angles = self.bc.calculateInverseKinematics(self.robot.id, self.robot.eef_id, pos_up, orn,
                                                        self.robot.arm_lower_limits, self.robot.arm_upper_limits, self.robot.arm_joint_ranges, self.robot.arm_rest_poses,
                                                        maxNumIterations=20)
@@ -231,7 +346,8 @@ class HumanDemo():
         eef_to_world = self.bc.multiplyTransforms(self.eef_to_cp[0], self.eef_to_cp[1],
                                                   cp_to_world[0], cp_to_world[1])
         world_to_eef = self.bc.invertTransform(eef_to_world[0], eef_to_world[1])
-        # draw_frame(self, position=world_to_eef[0], quaternion=world_to_eef[1])
+        draw_frame(self, position=world_to_eef[0], quaternion=world_to_eef[1])
+        self.target_eef = world_to_eef
         
         current_joint_angles = self.bc.calculateInverseKinematics(self.robot.id, self.robot.eef_id, world_to_eef[0], world_to_eef[1],
                                                        self.robot.arm_lower_limits, self.robot.arm_upper_limits, self.robot.arm_joint_ranges, self.robot.arm_rest_poses,
@@ -242,13 +358,17 @@ class HumanDemo():
         self.q_R_goal_after_grasp = current_joint_angles
         
     def update_pcd(self):
-        human_pcd, right_elbow_pcd = get_humanoid_point_cloud(self.humanoid._humanoid, self.right_elbow)
+        link_to_separate = [self.right_elbow, self.right_wrist]
+        human_pcd, separate_pcd = get_humanoid_point_cloud(self.humanoid._humanoid, link_to_separate)
         self.obs_pcd = np.vstack((self.obs_pcd, human_pcd))
-        self.right_elbow_pcd = np.array(right_elbow_pcd)
+        self.right_arm_pcd = np.array(separate_pcd)
+
+        # self.visualize_point_cloud(self.obs_pcd)
+        # self.visualize_point_cloud(self.right_arm_pcd)
     
-        # # update environment point cloud
-        # self.trajectory_planner.update_obstacle_pcd(self.obs_pcd)
-        # print("Updated environment point cloud")
+        # update environment point cloud
+        self.trajectory_planner.update_obstacle_pcd(self.obs_pcd)
+        print("Updated environment point cloud")
 
     ### INITIALIZE PLANNER
     def init_traj_planner(self):
@@ -264,8 +384,8 @@ class HumanDemo():
         # shoulder_max = [-1.3229245882839409, 1.2392816988875348, 3.1415394736319917]
         shoulder_min = [-3.14, -3.14, -3.14]
         shoulder_max = [3.14, 3.14, 3.14]
-        # elbow_min = [0.401146]
-        elbow_min = [0]
+        elbow_min = [0.401146]
+        # elbow_min = [0]
         elbow_max = [2.541304]  
         self.human_arm_lower_limits = shoulder_min + elbow_min
         self.human_arm_upper_limits = shoulder_max + elbow_max
@@ -292,12 +412,19 @@ class HumanDemo():
     def init_mppi_planner(self, current_joint_angles, target_joint_angles, clamp_by_human):
         # MPPI parameters
         N_JOINTS = len(self.robot.arm_controllable_joints)
+        # mppi_control_limits = [
+        #     -0.05 * np.ones(N_JOINTS),
+        #     0.05 * np.ones(N_JOINTS)
+        # ]
+        # mppi_nsamples = 1000
+        # mppi_covariance = 0.005
+        # mppi_lambda = 1.0
         mppi_control_limits = [
-            -0.5 * np.ones(N_JOINTS),
-            0.5 * np.ones(N_JOINTS)
+            -0.05 * np.ones(N_JOINTS),
+            0.05 * np.ones(N_JOINTS)
         ]
         mppi_nsamples = 500
-        mppi_covariance = 0.05
+        mppi_covariance = 0.005
         mppi_lambda = 1.0
 
         # Update current & target joint angles
@@ -325,108 +452,41 @@ class HumanDemo():
         self.trajectory_planner.update_obstacle_pcd(self.obs_pcd)
         print("Updated environment point cloud")
 
+    def get_mppi_trajectory(self, current_joint_angles):
         # Plan trajectory
         start_time = time.time()
-        trajectory = self.trajectory_planner.get_mppi_rollout(self.current_joint_angles)
+        trajectory = self.trajectory_planner.get_mppi_rollout(current_joint_angles)
         print("planning time : ", time.time()-start_time)
+        print(np.array(trajectory))
         return trajectory
     
+    def init_traj_follower(self):
+        JOINT_LIMITS = [
+            np.array(self.robot.arm_lower_limits), 
+            np.array(self.robot.arm_upper_limits)
+        ]
+
+        # Trajectory Follower initialization
+        self.trajectory_follower = TrajectoryFollower(
+            joint_limits = JOINT_LIMITS,
+            robot_urdf_location = robot_urdf_location,
+            control_points_json = control_points_location,
+            link_fixed = LINK_FIXED,
+            link_ee = LINK_EE,
+            link_skeleton = LINK_SKELETON,
+            control_points_number = control_points_number,
+            world_to_robot_base = self.world_to_robot_base,
+        )
+        print('trajectory follower instantiated')
+
+        # TODO update environment point cloud
+        self.trajectory_follower.update_obstacle_pcd(self.obs_pcd)
+        print("Updated environment point cloud")
+
     def init_informed_rrtstar_planner(self, current_joint_angles, target_joint_angles, traj):
         self.informed_rrtstar_planner = InformedRRTStar(current_joint_angles, target_joint_angles, self.obstacles,
                                                         self.robot.id, self.robot.arm_controllable_joints)
         return self.informed_rrtstar_planner.plan(traj)
-    
-    ### CAMERA IMAGE
-    def get_camera_img(self):
-        ### Desired image size and intrinsic camera parameters
-        ### Intrinsic camera matrix from 4th Oct 2021:    543.820     0.283204    314.424;
-        ###                                               0.00000     546.691     237.466;
-        width = 480
-        height = 480
-        f_x = 543.820
-        f_y = 546.691
-        c_x = 314.424
-        c_y = 237.466
-        skew = 0.283204
-
-        ### The far and near values depend on the min,max desired distance from the object
-        far = 1.5
-        near = 0.1
-
-        ### Camera intrinsic:
-        opengl_projection_matrix = (f_x/width,            0,                      0,                      0,
-                                    skew/width,           f_y/height,           0,                      0,
-                                    2*(c_x+0.5)/width-1,  2*(c_y+0.5)/height-1,   -(far+near)/(far-near), -1,
-                                    0,                    0,                      -2*far*near/(far-near), 0)
-
-        obj_pb_id = self.humanoid._humanoid
-        obj_link_id = self.right_elbow
-
-        aabb = p.getAABB(obj_pb_id, obj_link_id, physicsClientId=self.bc._client)
-        aabb_min = np.array(aabb[0])
-        aabb_max = np.array(aabb[1])
-        obj_center = list((aabb_max + aabb_min)/2)
-
-        camera_look_at = obj_center
-
-        phi_deg = 130
-        theta_deg = 15
-        camera_distance = 0.6
-
-        phi = np.deg2rad(phi_deg)
-        theta = np.deg2rad(theta_deg)
-        camera_eye_position = []
-        camera_eye_position.append(camera_distance*np.cos(phi)*np.sin(theta) + obj_center[0])
-        camera_eye_position.append(camera_distance*np.sin(phi)*np.sin(theta) + obj_center[1])
-        camera_eye_position.append(camera_distance*np.cos(theta) + obj_center[2])
-
-        # camera_eye_position.append(obj_center[0])
-        # camera_eye_position.append(obj_center[1])
-        # camera_eye_position.append(1.0 + obj_center[2])
-
-        view_matrix = self.bc.computeViewMatrix(
-            cameraEyePosition= camera_eye_position,
-            cameraTargetPosition=camera_look_at,
-            cameraUpVector = [0,0,1],
-            physicsClientId=self.bc._client
-        )
-
-        # T_world_to_camera = np.array(view_matrix).reshape(4,4)
-        # T_world_to_camera = T_world_to_camera.T
-        # world_to_camera_pos = -T_world_to_camera[:3, 3]
-        # world_to_camera_orn = quaternion_from_matrix(T_world_to_camera)
-        # draw_frame(self, position=world_to_camera_pos, quaternion=world_to_camera_orn)
-        # T_world_to_camera = compute_matrix(translation=world_to_camera_pos, rotation=world_to_camera_orn, rotation_type='quaternion')
-
-        view_mtx = np.array(view_matrix).reshape((4,4),order='F')
-        cam_pos = np.dot(view_mtx[:3,:3].T, -view_mtx[:3,3])
-
-
-        ### Get depth values using Tiny renderer
-        images = self.bc.getCameraImage(height=height,
-                width=width,
-                viewMatrix=view_matrix,
-                projectionMatrix=opengl_projection_matrix,
-                shadow=True,
-                renderer=p.ER_TINY_RENDERER,
-                physicsClientId=self.bc._client
-                )
-        
-        rgb = images[2][:, :, :-1]
-        seg = np.reshape(images[4], [height,width])
-        depth_buffer = np.reshape(images[3], [height,width]) 
-
-        # Define the camera intrinsic matrix
-        K = np.array([
-            [f_x, skew, c_x],
-            [0, f_y, c_y],
-            [0, 0, 1]
-        ])
-
-        dict = {'rgb': rgb, 'depth': depth_buffer, 'K': K, 'seg': seg}
-        np.save("img_human_scene.npy", dict)
-
-        return T_world_to_camera
 
     ### HELPER FUNCTIONS
     def attach_human_arm_to_eef(self, joint_type=p.JOINT_FIXED, attach_to_gripper=False):
@@ -458,8 +518,10 @@ class HumanDemo():
             T_world_to_object = compute_matrix(translation=obj_pose[0], rotation=obj_pose[1], rotation_type='quaternion')
             T_object_to_world = inverse_matrix(T_world_to_object)
 
-            self.trajectory_planner.attach_to_gripper(object_type="pcd", object_geometry=self.right_elbow_pcd,
+            self.trajectory_planner.attach_to_gripper(object_type="pcd", object_geometry=self.right_arm_pcd,
                                                       T_eef_to_obj=T_eef_to_object, T_obj_to_world=T_object_to_world)
+
+            return T_eef_to_object, T_object_to_world
     
     def deattach_human_arm_from_eef(self):
         if self.cid is not None:
@@ -506,15 +568,38 @@ class HumanDemo():
     def get_obstacle_point_cloud(self, obstacles):
         point_cloud = []
         for obstacle in obstacles:
-            # point_cloud.extend(get_point_cloud_from_collision_shapes(obstacle))
-            point_cloud.extend(get_point_cloud_from_visual_shapes(obstacle))
+            if obstacle == self.humanoid._humanoid:
+                human_pcd, _ = get_humanoid_point_cloud(self.humanoid._humanoid, [self.right_elbow])
+                point_cloud.extend(human_pcd)
+            elif obstacle == self.bed_id:
+                half_extents = [0.5, 1.7, 0.2]
+                point_cloud.extend(get_point_cloud_from_collision_shapes(obstacle, half_extents))
+            else:
+                point_cloud.extend(get_point_cloud_from_visual_shapes(obstacle))
         return np.array(point_cloud)
+    
+    def update_current_joint_angles(self, current_joint_angles):
+        self.current_joint_angles = current_joint_angles
+
+    def update_target_joint_angles(self, target_joint_angles):
+        self.target_joint_angles = target_joint_angles
+
+    def is_near_goal(self, current_joint_angles):
+        dist = np.linalg.norm(np.array(self.q_R_goal_after_grasp) - np.array(current_joint_angles))
+        print(dist)
+        if dist <= 0.75:
+            return True
+        else:
+            return False
 
 if __name__ == '__main__':
     env = HumanDemo()
     env.init_traj_planner()
+    env.init_traj_follower()
 
-    # # Step 1: trajectory before grasping
+    # ####
+
+    # # Step 0: trajectory before grasping
     # traj = env.init_mppi_planner(env.q_R_init_before_grasp, env.q_R_goal_before_grasp, clamp_by_human=False)
     # print(traj)
 
@@ -528,81 +613,181 @@ if __name__ == '__main__':
     # for i, joint_id in enumerate(env.robot.arm_controllable_joints):
     #     print(i, env.bc.getJointState(env.robot.id, joint_id)[0])
 
+    #####
+
+    # TEST MOVING WITH HUMAN ARM ATTACHED
+
     # Step 1: move robot to grasping pose
     for _ in range(100):
         env.reset_robot(env.robot_2, env.q_robot_2)
         env.reset_robot(env.robot, env.q_R_goal_before_grasp)
-        # env.reset_human_arm(env.q_human_init)
+        env.reset_human_arm(env.q_human_init)
         env.bc.stepSimulation()
 
-    # # # Step 2: attach human arm to eef
-    # env.update_pcd()
-    # env.attach_human_arm_to_eef(attach_to_gripper=True)
+    # Step 2: attach human arm to eef
+    env.update_pcd()
+    T_eef_to_object, T_object_to_world = env.attach_human_arm_to_eef(attach_to_gripper=True)
 
     # Step 3: trajectory after grasping
-    traj = env.init_mppi_planner(env.q_R_init_after_grasp, env.q_R_goal_after_grasp, clamp_by_human=False)
-    print(traj)
+    env.init_mppi_planner(env.q_R_goal_before_grasp, env.q_R_goal_after_grasp, clamp_by_human=True)
+    traj = env.get_mppi_trajectory(env.q_R_goal_before_grasp)
+    previous_update_time = time.time()
+    update_second = 10  # sec
 
-    # # # Step 4: detach human arm
+    # Step 4: initialize trajectory follower
+    # right_shoulder_pcd = get_point_cloud_from_collision_shapes_specific_link(env.humanoid._humanoid, env.right_shoulder)
+    # pcd = np.vstack((env.obs_pcd, right_shoulder_pcd))
+    # env.trajectory_follower.update_obstacle_pcd(pcd)
+    # env.visualize_point_cloud(env.obs_pcd)
+    env.trajectory_follower.update_obstacle_pcd(env.obs_pcd)
+    env.trajectory_follower.update_trajectory(traj)
+    env.trajectory_follower.attach_to_gripper(object_type="pcd", object_geometry=env.right_arm_pcd,
+                                              T_eef_to_obj=T_eef_to_object, T_obj_to_world=T_object_to_world,
+                                              T_world_to_human_base=env.T_world_to_human_base, T_right_elbow_to_cp=env.T_right_elbow_to_cp)
+    current_joint_angles = env.q_R_goal_before_grasp
+    current_human_joint_angles = env.q_human_init
+
+    # env.deattach_human_arm_from_eef()
     # env.reset_human_arm(env.q_human_goal)
-    # env.bc.stepSimulation()
-    # # env.deattach_human_arm_from_eef()
-    # # env.bc.stepSimulation()
-    # time.sleep(2)
 
+    # Step 5: simulation loop
+    while True:
+        # if near goal, execute rest of trajectory and end simulation loop
+        if env.is_near_goal(current_joint_angles):
+            for q in traj:
+                for _ in range (100):
+                    env.reset_robot(env.robot_2, env.q_robot_2)
+                    env.move_robot(env.robot, q)
+                    env.bc.stepSimulation()
+                time.sleep(0.5)
+            break
 
-    for q in traj:
-        for _ in range (300):
-            env.reset_robot(env.robot_2, env.q_robot_2)
-            env.move_robot(env.robot, q)
-            env.bc.stepSimulation()
-        # check for collision
-        if env.collision_fn(q):
-            print('collision!')
-        time.sleep(0.5)
+        # get velocity command
+        prev_time = time.time()
+        velocity_command = env.trajectory_follower.follow_trajectory(current_joint_angles, current_human_joint_angles)[0]
+        current_time = time.time()
+        print('following time: ', current_time-prev_time)
 
-    for i, joint_id in enumerate(env.robot.arm_controllable_joints):
-        print(i, env.bc.getJointState(env.robot.id, joint_id)[0])
+        # update trajectory 
+        if current_time-previous_update_time > update_second:
+            print('replanning...')
+            # right_shoulder_pcd = get_point_cloud_from_collision_shapes_specific_link(env.humanoid._humanoid, env.right_shoulder)
+            # pcd = np.vstack((env.obs_pcd, right_shoulder_pcd))
+            # env.trajectory_planner.update_obstacle_pcd(pcd)
+            # env.trajectory_follower.update_obstacle_pcd(pcd)
 
+            traj = env.get_mppi_trajectory(current_joint_angles)
+            env.trajectory_follower.update_trajectory(traj)
+            previous_update_time = time.time()
 
-    # traj = [[-3.11386739e+00, -1.76164691e+00,  1.22416424e+00, -9.02148110e-01,
-    #         4.29139712e-04,  1.44108175e+00],
-    #         [-3.02930256e+00, -1.85107927e+00 , 1.25371818e+00 ,-9.13523133e-01,
-    #         -7.61459340e-02,  1.56562846e+00],
-    #         [-2.97705818e+00, -1.87156734e+00  ,1.19430375e+00 ,-9.55770389e-01,
-    #         -2.17730051e-01,  1.66687387e+00],
-    #         [-2.97786049e+00, -1.82880447e+00  ,1.09617021e+00 ,-1.01394482e+00,
-    #         -3.66203472e-01,  1.71600753e+00],
-    #         [-2.98104626e+00, -1.84668776e+00  ,1.11795089e+00 ,-1.08453633e+00,
-    #         -5.13580688e-01,  1.81942949e+00],
-    #         [-2.96571295e+00, -1.84644592e+00  ,1.09028789e+00 ,-1.16176760e+00,
-    #         -6.66586610e-01,  1.91575805e+00],
-    #         [-2.92668811e+00, -1.82006348e+00  ,9.96716407e-01 ,-1.23314637e+00,
-    #         -7.97124254e-01,  1.98257166e+00],
-    #         [-2.86032357e+00, -1.82221192e+00  ,8.86122076e-01 ,-1.28758753e+00,
-    #         -9.21289069e-01,  2.05231226e+00],
-    #         [-2.75466568e+00, -1.82010616e+00  ,8.07137025e-01 ,-1.27900833e+00,
-    #         -1.02543020e+00,  2.15902463e+00],
-    #         [-2.69048092e+00, -1.74320623e+00  ,7.83813966e-01 ,-1.27842710e+00,
-    #         -1.14108037e+00,  2.28495985e+00],
-    #         [-2.65527328e+00, -1.63406321e+00  ,8.59301162e-01 ,-1.41809050e+00,
-    #         -1.16436828e+00,  2.30464640e+00],
-    #         [-2.56695437e+00, -1.54918346e+00  ,9.01788390e-01 ,-1.56339883e+00,
-    #         -1.17837075e+00,  2.33550639e+00],
-    #         [-2.42963411e+00, -1.51268728e+00  ,8.75448948e-01 ,-1.65558025e+00,
-    #         -1.26835904e+00,  2.36422273e+00],
-    #         [-2.32878629e+00, -1.49335571e+00  ,8.39883020e-01 ,-1.70037665e+00,
-    #         -1.42715402e+00,  2.35313858e+00],
-    #         [-2.26123644e+00, -1.37850816e+00  ,8.40335174e-01 ,-1.81531153e+00,
-    #         -1.35787235e+00,  2.28914850e+00],
-    #         [-2.25349430e+00, -1.26347144e+00  ,9.30423135e-01 ,-1.72420691e+00,
-    #         -1.39288734e+00,  2.37010116e+00],
-    #         [-2.24747889e+00, -1.15453862e+00  ,1.01857040e+00 ,-1.63090209e+00,
-    #         -1.43123148e+00,  2.45186182e+00],
-    #         [-2.24597504e+00, -1.12730542e+00  ,1.04060721e+00 ,-1.60757588e+00,
-    #         -1.44081752e+00,  2.47230199e+00]]
+        # if valid velocity command, move robot
+        else:
+            for _ in range(100):
+                for i, joint_id in enumerate(env.robot.arm_controllable_joints):
+                    env.bc.setJointMotorControl2(
+                            env.robot.id, joint_id,
+                            controlMode = p.VELOCITY_CONTROL,
+                            targetVelocity = velocity_command[i]
+                        )
+                env.reset_robot(env.robot_2, env.q_robot_2)
+                env.bc.stepSimulation()
 
+            # save current_joint_angle
+            current_joint_angles = []
+            for joint_id in env.robot.arm_controllable_joints:
+                current_joint_angles.append(env.bc.getJointState(env.robot.id, joint_id)[0])
+            current_human_joint_angles = []
+            current_human_joint_angles.append(env.bc.getJointState(env.humanoid._humanoid, env.right_shoulder_y)[0])
+            current_human_joint_angles.append(env.bc.getJointState(env.humanoid._humanoid, env.right_shoulder_p)[0])
+            current_human_joint_angles.append(env.bc.getJointState(env.humanoid._humanoid, env.right_shoulder_r)[0])
+            current_human_joint_angles.append(env.bc.getJointState(env.humanoid._humanoid, env.right_elbow)[0])
 
+    time.sleep(10)
+    print('done')
+    ###
+
+    # ## TEST MOVING WITHOUT HUMAN ARM ATTACHED
+
+    # # Step 1: move robot to grasping pose
+    # for _ in range(100):
+    #     env.reset_robot(env.robot_2, env.q_robot_2)
+    #     env.reset_robot(env.robot, env.q_R_goal_before_grasp)
+    #     env.bc.stepSimulation()
+
+    # # Step 2: initialize trajectory planner and get mppi trajectory (after grasping)
+    # env.init_mppi_planner(env.q_R_goal_before_grasp, env.q_R_goal_after_grasp, clamp_by_human=False)
+    # traj = env.get_mppi_trajectory(env.q_R_goal_before_grasp)
+    # previous_update_time = time.time()
+    # update_second = 5  # sec
+
+    # # Step 3: initialize trajectory follower
+    # env.init_traj_follower()
+    # env.trajectory_follower.update_trajectory(traj)
+    # current_joint_angles = env.q_R_goal_before_grasp
+
+    # # Step 4: simulation loop
+    # while True:
+    #     # get velocity command
+    #     prev_time = time.time()
+    #     velocity_command = env.trajectory_follower.follow_trajectory(current_joint_angles)[0]
+    #     current_time = time.time()
+    #     print('following time: ', current_time-prev_time)
+
+    #     # update trajectory 
+    #     if current_time-previous_update_time > update_second:
+    #         traj = env.get_mppi_trajectory(current_joint_angles)
+    #         env.trajectory_follower.update_trajectory(traj)
+    #         previous_update_time = time.time()
+
+    #     # if valid velocity command, move robot
+    #     else:
+    #         for i, joint_id in enumerate(env.robot.arm_controllable_joints):
+    #             env.bc.setJointMotorControl2(
+    #                     env.robot.id, joint_id,
+    #                     controlMode = p.VELOCITY_CONTROL,
+    #                     targetVelocity = velocity_command[i]
+    #                 )
+    #         env.reset_robot(env.robot_2, env.q_robot_2)
+    #         env.bc.stepSimulation()
+
+    #         # save current_joint_angle
+    #         current_joint_angles = []
+    #         for joint_id in env.robot.arm_controllable_joints:
+    #             current_joint_angles.append(env.bc.getJointState(env.robot.id, joint_id)[0])
+
+    # #####
+
+    ## DEBUGGING TRAJ
+    
+    traj = np.array([[-2.25131376, -2.75403316,  2.47657261, -1.63770982, -1.50791089,  0.57950216],
+ [-2.2594125 , -2.69183667,  2.3577178 , -1.52532379, -1.42537428,  0.60821025],
+ [-2.22364404, -2.59686807,  2.23862245, -1.4458647 , -1.37892938,  0.6894849 ],
+ [-2.17368458, -2.49006036,  2.13829055, -1.40708691, -1.35863832,  0.801433  ],
+ [-2.11583582, -2.39251118,  2.05244401, -1.41475413, -1.32953978,  0.9377891 ],
+ [-2.07636324, -2.2846245 ,  1.9755482 , -1.43004539, -1.32985656,  1.07260082],
+ [-2.05432664, -2.17579465,  1.86233269, -1.39655633, -1.28538235,  1.17735241],
+ [-2.03296581, -2.06952079,  1.77678745, -1.42388806, -1.26662067,  1.31219035],
+ [-2.01610716, -1.96339687,  1.69127296, -1.45882471, -1.2582444 ,  1.45040615],
+ [-1.9936056 , -1.86636543,  1.63034108, -1.52659069, -1.27485072,  1.59495001],
+ [-1.96879363, -1.74494649,  1.55633625, -1.53556323, -1.32527522,  1.72132378],
+ [-1.97162471, -1.62394717,  1.45554699, -1.52843886, -1.3488897 ,  1.8383477 ],
+ [-2.0077383 , -1.5123799 ,  1.3388635 , -1.51697911, -1.34439535,  1.94882628],
+ [-2.04228275, -1.41022548,  1.2489475 , -1.53729084, -1.37900382,  2.07194629],
+ [-2.07510526, -1.32428931,  1.15083346, -1.58101515, -1.4131321 ,  2.19193319],
+ [-2.15737589, -1.22944521,  1.09776156, -1.59380365, -1.42646212,  2.32692557],
+ [-2.23964653, -1.13460112,  1.04468966, -1.60659215, -1.43979213,  2.46191796],
+ [-2.24597504, -1.12730542,  1.04060721, -1.60757588, -1.44081752,  2.47230199]]
+)
+
+    # for _ in range (300):
+    #     env.reset_robot(env.robot_2, env.q_robot_2)
+    #     env.move_robot(env.robot, traj[0])
+    #     env.bc.stepSimulation()
+    # env.attach_human_arm_to_eef()
+
+    # time.sleep(4)
+
+    # # move to this trajectory
     # for q in traj:
     #     for _ in range (300):
     #         env.reset_robot(env.robot_2, env.q_robot_2)
@@ -611,31 +796,55 @@ if __name__ == '__main__':
     #     # check for collision
     #     if env.collision_fn(q):
     #         print('collision!')
-    #         print(q)
     #     time.sleep(0.5)
 
-    # Step 5: trajectory by informed rrtstar
+
+    # initialize trajectory follower
+    env.init_traj_follower()
+    env.trajectory_follower.update_trajectory(traj)
+    current_joint_angles = traj[0]
+
+    # move robot to grasping pose
     for _ in range(100):
         env.reset_robot(env.robot_2, env.q_robot_2)
-        env.reset_robot(env.robot, env.q_R_init_after_grasp)
-        # env.reset_human_arm(env.q_human_goal)
+        env.reset_robot(env.robot, env.q_R_goal_before_grasp)
+        env.reset_human_arm(env.q_human_init)
         env.bc.stepSimulation()
 
-    traj2 = env.init_informed_rrtstar_planner(env.q_R_init_after_grasp, env.q_R_goal_after_grasp, traj)
-    print('informed rrtstar planner done')
-    print(traj2)
+    # update point cloud (attach arm control points)
+    env.update_pcd()
+    T_eef_to_object, T_object_to_world = env.attach_human_arm_to_eef(attach_to_gripper=True)
+    right_shoulder_pcd = get_point_cloud_from_collision_shapes_specific_link(env.humanoid._humanoid, env.right_shoulder)
+    pcd = np.vstack((env.obs_pcd, right_shoulder_pcd))
+    env.trajectory_follower.update_obstacle_pcd(pcd)
+    env.trajectory_follower.attach_to_gripper(object_type="pcd", object_geometry=env.right_arm_pcd,
+                                              T_eef_to_obj=T_eef_to_object, T_obj_to_world=T_object_to_world,
+                                              T_world_to_human_base=env.T_world_to_human_base, T_right_elbow_to_cp=env.T_right_elbow_to_cp)
+    # env.deattach_human_arm_from_eef()
 
-    for q in traj2:
-        for _ in range (300):
-            env.reset_robot(env.robot_2, env.q_robot_2)
-            env.move_robot(env.robot, q)
-            env.bc.stepSimulation()
-            # check for collision
-        if env.collision_fn(q):
-            print('collision!')
-            time.sleep(3)
-        time.sleep(0.5)
+    # move to start following the traj
+    for _ in range (500):
+        env.reset_robot(env.robot_2, env.q_robot_2)
+        env.move_robot(env.robot, traj[0])
+        env.bc.stepSimulation()
+    print('here')
 
-    for i, joint_id in enumerate(env.robot.arm_controllable_joints):
-        print(i, env.bc.getJointState(env.robot.id, joint_id)[0])
+    while True:
+        # get velocity command
+        velocity_command = env.trajectory_follower.follow_trajectory(current_joint_angles, [])[0]
+        current_time = time.time()
 
+        # if valid velocity command, move robot
+        for i, joint_id in enumerate(env.robot.arm_controllable_joints):
+            env.bc.setJointMotorControl2(
+                    env.robot.id, joint_id,
+                    controlMode = p.VELOCITY_CONTROL,
+                    targetVelocity = velocity_command[i]
+                )
+        env.reset_robot(env.robot_2, env.q_robot_2)
+        env.bc.stepSimulation()
+
+        # save current_joint_angle
+        current_joint_angles = []
+        for joint_id in env.robot.arm_controllable_joints:
+            current_joint_angles.append(env.bc.getJointState(env.robot.id, joint_id)[0])

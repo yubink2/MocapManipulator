@@ -34,9 +34,6 @@ from csdf.pointcloud_sdf import PointCloud_CSDF
 # Import pytorch-kinematics functionality
 import pytorch_kinematics as pk
 
-# Import constraint projection
-from trajectory_following.trajectory_following_projection import ConstraintProjection
-
 
 log = logging.getLogger('TRAJECTORY FOLLOWING')
 
@@ -106,9 +103,6 @@ class TrajectoryFollower(nn.Module):
         # Initialize T_world_to_robot_base
         self._world_to_robot_base = torch.tensor(world_to_robot_base, device = self._device, dtype = self._float_dtype)
 
-        # Initialize constraint class as None
-        self.constraint = None
-
         try:
             if self._control_points_json is not None:
                 with open(control_points_json, "rt") as json_file:
@@ -130,31 +124,26 @@ class TrajectoryFollower(nn.Module):
                     self.control_points[link_name] = torch.stack(self.control_points[link_name])
         except FileNotFoundError:
             print(control_points_json + " was not found")
-
-    def _init_constraint_projection(self, T_world_to_human_base, T_right_elbow_to_cp, T_eef_to_cp):
-        self.constraint = ConstraintProjection(ur5_chain = self.differentiable_model, 
-                                               T_world_to_robot_base = self._world_to_robot_base, 
-                                               T_world_to_human_base = T_world_to_human_base,
-                                               T_right_elbow_to_cp = T_right_elbow_to_cp,
-                                               T_eef_to_cp = T_eef_to_cp,
-                                               device=self._device, float_dtype=self._float_dtype)
-
+        
     def compute_ee_pose(self, state: torch.Tensor) -> torch.Tensor:
         
         """
         Receives a robot configuration and computes the end effector pose as a tensor.
         
-        :param state: Current joint configuration (N_STATE)
-        :returns: End effector pose (4 x 4)
+        :param state: Current joint configuration (BATCH_SIZE x N_STATE)
+        :returns: End effector pose (BATCH_SIZE x 4 x 4)
         """
         
+        batch_size = state.shape[0]
+        
         # Find link locations after stacking robot configuration with gripper state
-        link_transformation = self.differentiable_model.forward_kinematics(state, end_only=True)
+        augmented_robot_state = torch.cat((state, torch.tile(self._gripper_state, (batch_size, 1))), dim=1)
+        link_transformation = self.differentiable_model.forward_kinematics(augmented_robot_state, end_only=True)
 
         # Find end effector pose
-        ee_pose = self._world_to_robot_base @ link_transformation[0].get_matrix().to(dtype=self._float_dtype).squeeze()
+        ee_pose = link_transformation.get_matrix()
         
-        return ee_pose                                        
+        return ee_pose
     
     def _get_skeleton_control_points(self, state: torch.Tensor) -> torch.Tensor:
         
@@ -169,7 +158,7 @@ class TrajectoryFollower(nn.Module):
         
         # Find link locations after stacking robot configuration with gripper state
         augmented_robot_state = torch.cat((state, torch.tile(self._gripper_state, (batch_size, 1))), dim=1)
-        link_transformations = self.differentiable_model.forward_kinematics(state, end_only=False)
+        link_transformations = self.differentiable_model.forward_kinematics(augmented_robot_state, end_only=False)
         
         # Initialize skeleton for control points - tensor should be BATCH_SIZE x 1 x 3
         skeleton_control_point_locations = torch.zeros((batch_size, len(self._link_skeleton), 3)).to(self._device)
@@ -205,11 +194,8 @@ class TrajectoryFollower(nn.Module):
 
         # Find link locations after stacking robot configuration with gripper state
         augmented_robot_state = torch.cat((state, torch.tile(self._gripper_state, (batch_size, 1))), dim=1)
-        link_transformations = self.differentiable_model.forward_kinematics(state, end_only=False)
+        link_transformations = self.differentiable_model.forward_kinematics(augmented_robot_state, end_only=False)
         # Link transformations is a dict with keys being link names, value is BATCH x 4 x 4
-
-        # Find end effector poses (w.r.t. robot base)
-        self.ee_pose = link_transformations[self._link_skeleton[-1]].get_matrix().unsqueeze(1).to(dtype = self._float_dtype)
 
         # Control points tensor should be BATCH x N x 3 where N is the num of control points
         control_point_locations = torch.zeros((batch_size, num_control_points, 3)).to(device = self._device)
@@ -221,14 +207,6 @@ class TrajectoryFollower(nn.Module):
 
             control_point_locations[:, idx : idx + ctrl_point_transforms.shape[0], :] = world_to_ctrl_points[:,:,:3,3]
             idx += ctrl_point_transforms.shape[0]
-
-        # Compute grasped object control points
-        if self._grasped_object_grasp_T_object is not None:
-            T_world_to_eef = torch.matmul(self._world_to_robot_base, self.ee_pose[:, ])
-            T_eef_to_obj_ctrl_pts = torch.matmul(self._grasped_object_grasp_T_object, self._grasped_object_nominal_control_points)
-            T_world_to_obj_ctrl_pts = torch.matmul(T_world_to_eef, T_eef_to_obj_ctrl_pts)
-            object_control_points = T_world_to_obj_ctrl_pts[:, :, :3, 3]
-            control_point_locations = torch.cat((control_point_locations, object_control_points), dim=1)
         
         return control_point_locations
     
@@ -326,7 +304,6 @@ class TrajectoryFollower(nn.Module):
     def implicit_obstacles(
         self,
         control_points: torch.Tensor,
-        eef_matrix: torch.Tensor,
         collision_threshold: float = 0.01,
     ) -> torch.Tensor:
         
@@ -341,18 +318,7 @@ class TrajectoryFollower(nn.Module):
         # Evaluate C-SDF based on these points
         sdf_values = self.csdf.forward(control_points) - collision_threshold
 
-        # # max(dist to constraint manifold, dist to obstacles)
-        # T_world_to_cp = eef_matrix @ self.T_eef_to_cp
-        # _, dist_to_constraint_manifold = self.constraint.constraint_manifold_on_human(T_world_to_cp)
-        
-        # if sdf_values < 0:
-        #     dist = sdf_values
-        # else:
-        #     dist = max(dist_to_constraint_manifold, sdf_values)
-
-        # return sdf_values, dist
-
-        return sdf_values, sdf_values
+        return sdf_values
     
     def update_obstacle_pcd(
         self,
@@ -371,11 +337,10 @@ class TrajectoryFollower(nn.Module):
     def attach_to_gripper(
         self,
         object_geometry,
-        object_type,
-        T_eef_to_obj,
-        T_obj_to_world,
-        T_world_to_human_base,
-        T_right_elbow_to_cp,
+        world_T_grasp: np.ndarray,
+        object_name: str,
+        object_type: str,
+        world_T_object: np.ndarray = None,
     ) -> bool:
 
         """
@@ -389,42 +354,25 @@ class TrajectoryFollower(nn.Module):
         :returns: True if object is successfully attached, False otherwise
         """
 
-        # Add control points to collision checker
-        if object_type == "pcd":
-            # Construct tensor describing grasp_T_object (T_eef_to_obj)
-            self._grasped_object_grasp_T_object = torch.from_numpy(T_eef_to_obj).to(self._device, dtype=self._float_dtype)
+        # Add mesh object to collision checker
+        if object_type == "mesh":
+            # Read the mesh
+            object_mesh = o3d.io.read_triangle_mesh(object_geometry)
 
-            # Write point clouds (in world frame) as transforms
-            object_pcd_tensor = torch.tensor(object_geometry, device=self._device)
-            object_pcd_num = object_pcd_tensor.shape[0]
-            object_transforms = torch.zeros((object_pcd_num, 4, 4), device=self._device)
-            identity_rotation = torch.eye(3, device=self._device)
+            # Sample points on the mesh's surface
+            object_nominal_control_points = np.asarray(object_mesh.sample_points_uniformly(number_of_points=20).points, dtype= np.float32)
+            self._grasped_object_nominal_control_points = torch.from_numpy(object_nominal_control_points).to(self._device)
 
-            for i in range(object_pcd_num):
-                object_transforms[i, :3, :3] = identity_rotation
-                object_transforms[i, :3, 3] = object_pcd_tensor[i]
-                object_transforms[i, 3, 3] = 1.0
-
-            object_transforms.to(dtype=self._float_dtype)
-
-            # Compute grasped object control points in eef frame
-            T_obj_to_world = torch.from_numpy(T_obj_to_world).to(device=self._device, dtype=self._float_dtype)
-            self._grasped_object_nominal_control_points = torch.matmul(T_obj_to_world, object_transforms).to(device=self._device, dtype=self._float_dtype)
-
-        # Update trajectory control points
+            # Construct tensor describing grasp_T_object
+            grasped_object_grasp_T_object = np.linalg.inv(world_T_grasp) @ world_T_object
+            self._grasped_object_grasp_T_object = torch.from_numpy(grasped_object_grasp_T_object).to(self._device)
+        
         if self._control_points_json is not None:
             self._trajectory_skeleton_control_points = self._get_mesh_control_points(self._trajectory)
-
         else:
             self._trajectory_skeleton_control_points = self._get_skeleton_control_points(self._trajectory)
         self._trajectory_skeleton_control_points_distances = self.csdf.compute_distances(self._trajectory_skeleton_control_points)
-
-        # Initialize constriant class
-        self.T_eef_to_cp = torch.tensor(T_eef_to_obj, dtype=self._float_dtype, device=self._device)
-        self._init_constraint_projection(T_world_to_human_base=T_world_to_human_base, 
-                                         T_right_elbow_to_cp=T_right_elbow_to_cp, 
-                                         T_eef_to_cp=T_eef_to_obj)
-
+        
         return True
     
     def detach_from_gripper(
@@ -472,8 +420,7 @@ class TrajectoryFollower(nn.Module):
 
         # Compute SDF value
         since = time.time()
-        eef_m = self.compute_ee_pose(current_ja)
-        sdf_value, repulsive_potential = self.implicit_obstacles(control_points, eef_m)
+        sdf_value = self.implicit_obstacles(control_points)
         # log.info(f"SDF computed in: {time.time()-since}")
 
         since = time.time()
@@ -483,7 +430,7 @@ class TrajectoryFollower(nn.Module):
         # Define potential field value
         if self._consider_obstacle_collisions:
             # Main potential field definition
-            potential = torch.div(1.0 + 10.0 * attractive_potential, 1.0 + 2.0 * repulsive_potential)
+            potential = torch.div(1.0 + 10.0 * attractive_potential, 1.0 + 2.0 * sdf_value)
         else:
             # Here the robot does not care about obstacles
             potential = 10.0 * attractive_potential
@@ -491,7 +438,7 @@ class TrajectoryFollower(nn.Module):
         return potential
 
 
-    def follow_trajectory(self, current_joint_angles, current_human_joint_angles):
+    def follow_trajectory(self, current_joint_angles):
 
         """
         Main method for trajectory following.
@@ -507,7 +454,6 @@ class TrajectoryFollower(nn.Module):
         # Extract current joint states
         current_joint_angles_tensor = torch.tensor(current_joint_angles).unsqueeze(0).to('cuda')
         current_joint_angles_tensor.requires_grad = True
-        current_human_joint_angles = torch.tensor(current_human_joint_angles).unsqueeze(0).to('cuda')
         
         # Find the value of the potential field
         potential_field = self.forward(current_joint_angles_tensor)
@@ -520,42 +466,10 @@ class TrajectoryFollower(nn.Module):
         current_velocity_command = -CONTROL_GAIN * potential_field_grad
         if torch.linalg.norm(current_velocity_command) > MAX_SPEED:
             current_velocity_command = MAX_SPEED * current_velocity_command / torch.linalg.norm(current_velocity_command)
-            current_velocity_command = current_velocity_command.to(dtype=self._float_dtype)
+        current_velocity_command = current_velocity_command.cpu().numpy()
 
-        ####
-        if self.constraint is not None:
-            # Calculate: velocity command -> desired q_R -> desired eef pose
-            desired_joint_angles = torch.tensor(current_joint_angles, device=self._device) + current_velocity_command * 0.5  # time step
-            desired_joint_angles = desired_joint_angles.squeeze()
-            desired_eef = self.compute_ee_pose(desired_joint_angles)
-            
-            # Compute the Jacobian of the constraint at the current joint angles
-            J_g = self.constraint.compute_constraint_jacobian_on_robot(current_joint_angles, desired_eef, current_human_joint_angles)
-            J_g = torch.tensor(J_g).to(device=self._device, dtype=self._float_dtype)
-
-            # Project the velocity command onto the null space of the constraint
-            J_g = J_g.reshape(1, -1)
-            pseudo_inverse = torch.linalg.pinv(J_g @ J_g.T).to(device=self._device, dtype=self._float_dtype)
-            I = torch.eye(J_g.shape[1]).to(device=self._device, dtype=self._float_dtype)
-            projection_matrix = I - J_g.T @ pseudo_inverse @ J_g
-            current_velocity_command_projected = (torch.mm(projection_matrix, (current_velocity_command).T)).T
-
-            current_velocity_command_corrected = current_velocity_command_projected.cpu().numpy()
-
-            # Define velocity command
-            velocity_command = current_velocity_command_corrected
-
-        else:
-            current_velocity_command = current_velocity_command.cpu().numpy()
-
-            # Define velocity command
-            velocity_command = current_velocity_command
-
-        # #####
-        # current_velocity_command = current_velocity_command.cpu().numpy()
-
-        # # Define velocity command
-        # velocity_command = current_velocity_command
+        # Define velocity command
+        velocity_command = current_velocity_command
 
         return velocity_command
 

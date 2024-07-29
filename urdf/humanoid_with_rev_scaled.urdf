@@ -1,0 +1,331 @@
+<robot name="dumpUrdf">
+	<link name="base" >
+		<inertial>
+				<origin rpy="0 0 0" xyz="0 0 0" />
+			 <mass value="0.00000106" />
+			<inertia ixx="0.00000001" ixy="0" ixz="0" iyy="0.00000001" iyz="0" izz="0.00000001" />
+		</inertial>
+	</link>
+	<link name="root" >
+		<inertial>
+				<origin rpy="0 0 0" xyz="0.000000 0.061600 0.000000" />
+			 <mass value="0.00636" />
+			<inertia ixx="0.0000484" ixy="0" ixz="0" iyy="0.0000484" iyz="0" izz="0.0000484" />
+		</inertial>
+		<collision>
+				<origin rpy="0 0 0" xyz="0.000000 0.061600 0.000000" />
+			<geometry>
+				<sphere radius="0.079200" />
+			</geometry>
+		</collision>
+	</link>
+	<joint name="root" type="fixed" >
+		<parent link="base" />
+		<child link="root" />
+				<origin rpy="0 0 0" xyz="0.000000 0.000000 0.000000" />
+	</joint>
+	<link name="chest" >
+		<inertial>
+				<origin rpy="0 0 0" xyz="0.000000 0.105600 0.000000" />
+			 <mass value="0.0151" />
+			<inertia ixx="0.000728" ixy="0" ixz="0" iyy="0.000728" iyz="0" izz="0.000728" />
+		</inertial>
+		<collision>
+				<origin rpy="0 0 0" xyz="0.000000 0.105600 0.000000" />
+			<geometry>
+				<sphere radius="0.096800" />
+			</geometry>
+		</collision>
+	</link>
+	<joint name="chest" type="fixed" >
+		<parent link="root" />
+		<child link="chest" />
+				<origin rpy="0 0 0" xyz="0.000000 0.20781288 0.000000" />
+	</joint>
+	<link name="neck" >
+		<inertial>
+				<origin rpy="0 0 0" xyz="0.000000 0.154000 0.000000" />
+			 <mass value="0.00212" />
+			<inertia ixx="0.0000145" ixy="0" ixz="0" iyy="0.0000145" iyz="0" izz="0.0000145" />
+		</inertial>
+		<collision>
+				<origin rpy="0 0 0" xyz="0.000000 0.154000 0.000000" />
+			<geometry>
+				<sphere radius="0.090200" />
+			</geometry>
+		</collision>
+	</link>
+	<joint name="neck" type="fixed" >
+		<parent link="chest" />
+		<child link="neck" />
+				<origin rpy="0 0 0" xyz="0.000000 0.19692672 0.000000" />
+	</joint>
+	<link name="right_hip" >
+		<inertial>
+				<origin rpy="0 0 0" xyz="0.000000 -0.184800 0.000000" />
+			 <mass value="0.00467" />
+			<inertia ixx="0.0000325" ixy="0" ixz="0" iyy="0.0000325" iyz="0" izz="0.0000325" />
+		</inertial>
+		<collision>
+				<origin rpy="-1.570796 0 0" xyz="0.000000 -0.184800 0.000000" />
+			<geometry>
+				<cylinder length="0.264000" radius="0.048400" />
+			</geometry>
+		</collision>
+	</link>
+	<joint name="right_hip" type="fixed" >
+		<parent link="root" />
+		<child link="right_hip" />
+				<origin rpy="0 0 0" xyz="0.000000 0.000000 0.07470056" />
+	</joint>
+	<link name="right_knee" >
+		<inertial>
+				<origin rpy="0 0 0" xyz="0.000000 -0.176000 0.000000" />
+			 <mass value="0.00312" />
+			<inertia ixx="0.0000216" ixy="0" ixz="0" iyy="0.0000216" iyz="0" izz="0.0000216" />
+		</inertial>
+		<collision>
+				<origin rpy="-1.570796 0 0" xyz="0.000000 -0.176000 0.000000" />
+			<geometry>
+				<cylinder length="0.272800" radius="0.044000" />
+			</geometry>
+		</collision>
+	</link>
+	<joint name="right_knee" type="fixed" >
+		<parent link="right_hip" />
+		<child link="right_knee" />
+		 <limit effort="1.0" lower="-3.14" upper="0." velocity="0.5"/>
+			<origin rpy="0 0 0" xyz="0.000000 -0.3709596 0.000000" />
+		<axis xyz="0.000000 0.000000 1.000000" />
+	</joint>
+	<link name="right_ankle" >
+		<inertial>
+				<origin rpy="0 0 0" xyz="0.039600 -0.019800 0.000000" />
+			 <mass value="0.00104" />
+			<inertia ixx="0.000007" ixy="0" ixz="0" iyy="0.000007" iyz="0" izz="0.000007" />
+		</inertial>
+		<collision>
+				<origin rpy="0 0 0" xyz="0.039600 -0.019800 0.000000" />
+			<geometry>
+				<box size="0.155760 0.048400 0.079200" />
+			</geometry>
+		</collision>
+	</link>
+	<joint name="right_ankle" type="fixed" >
+		<parent link="right_knee" />
+		<child link="right_ankle" />
+				<origin rpy="0 0 0" xyz="0.000000 -0.3606856 0.000000" />
+	</joint>
+
+	<link name="right_shoulder_yaw">
+        <inertial>
+            <mass value="0.00000024"/>
+            <inertia ixx="0.000000000001" ixy="0.000000000001" ixz="0.000000000001" iyy="0.000000000001" iyz="0.000000000001" izz="0.000000000001"/>
+        </inertial>
+    </link>
+    <joint name="right_shoulder_yaw" type="revolute">
+        <parent link="chest"/>
+        <child link="right_shoulder_yaw"/>
+        <origin rpy="0 0 0" xyz="-0.021164 0.214280 0.1611376"/>
+        <axis xyz="0 0 1"/>
+        <limit effort="0.01" lower="-3.14" upper="3.14" velocity="1"/>
+    </joint>
+    <link name="right_shoulder_pitch">
+        <inertial>
+            <mass value="0.00000024"/>
+            <inertia ixx="0.000000000001" ixy="0.000000000001" ixz="0.000000000001" iyy="0.000000000001" iyz="0.000000000001" izz="0.000000000001"/>
+        </inertial>
+    </link>
+    <joint name="right_shoulder_pitch" type="revolute">
+        <parent link="right_shoulder_yaw"/>
+        <child link="right_shoulder_pitch"/>
+        <origin rpy="0 0 0" xyz="0 0 0"/>
+        <axis xyz="0 1 0"/>
+        <limit effort="0.01" lower="-3.14" upper="3.14" velocity="1"/>
+    </joint>
+    <link name="right_shoulder_roll">
+        <inertial>
+            <origin rpy="0 0 0" xyz="0 0 0" />
+            <mass value="0.00000024"/>
+            <inertia ixx="0.000000000001" ixy="0.000000000001" ixz="0.000000000001" iyy="0.000000000001" iyz="0.000000000001" izz="0.000000000001"/>
+        </inertial>
+    </link>
+    <joint name="right_shoulder_roll" type="revolute">
+        <parent link="right_shoulder_pitch"/>
+        <child link="right_shoulder_roll"/>
+        <origin rpy="0 0 0" xyz="0 0 0"/>
+        <axis xyz="1 0 0"/>
+        <limit effort="0.01" lower="-3.14" upper="3.14" velocity="1"/>
+    </joint>
+    
+	<link name="right_shoulder" >
+		<inertial>
+				<origin rpy="0 0 0" xyz="0.000000 -0.101200 0.000000" />
+			 <mass value="0.00156" />
+			<inertia ixx="0.000001" ixy="0" ixz="0" iyy="0.000001" iyz="0" izz="0.000001" />
+		</inertial>
+		<collision>
+				<origin rpy="-1.570796 0 0" xyz="0.000000 -0.101200 0.000000" />
+			<geometry>
+				<cylinder length="0.136400" radius="0.039600" />
+			</geometry>
+		</collision>
+	</link>
+	<joint name="right_shoulder" type="fixed" >
+		<parent link="right_shoulder_roll" />
+		<child link="right_shoulder" />
+				<origin rpy="0 0 0" xyz="0 0 0" />
+	</joint>
+
+	<link name="right_elbow" >
+		<inertial>
+				<origin rpy="0 0 0" xyz="0.000000 -0.105600 0.000000" />
+			 <mass value="0.00104" />
+			<inertia ixx="0.000001" ixy="0" ixz="0" iyy="0.000001" iyz="0" izz="0.000001" />
+		</inertial>
+		<collision>
+				<origin rpy="-1.570796 0 0" xyz="0.000000 -0.105600 0.000000" />
+			<geometry>
+				<cylinder length="0.118800" radius="0.035200" />
+			</geometry>
+		</collision>
+	</link>
+	<joint name="right_elbow" type="revolute" >
+		<parent link="right_shoulder" />
+		<child link="right_elbow" />
+		<limit effort="1.0" lower="0" upper="3.14" velocity="0.5"/>
+				<origin rpy="0 0 0" xyz="0.000000 -0.24181344 0.000000" />
+		<axis xyz="0.000000 0.000000 1.000000" />
+	</joint>
+    
+	<link name="right_wrist" >
+		<inertial>
+				<origin rpy="0 0 0" xyz="0.000000 0.000000 0.000000" />
+			 <mass value="0.00012" />
+			<inertia ixx="0.000001" ixy="0" ixz="0" iyy="0.000001" iyz="0" izz="0.000001" />
+		</inertial>
+		<collision>
+				<origin rpy="0 0 0" xyz="0.000000 0.000000 0.000000" />
+			<geometry>
+				<sphere radius="0.035200" />
+			</geometry>
+		</collision>
+	</link>
+	<joint name="right_wrist" type="fixed" >
+		<parent link="right_elbow" />
+		<child link="right_wrist" />
+				<origin rpy="0 0 0" xyz="0.000000 -0.22787232 0.000000" />
+	</joint>
+	<link name="left_hip" >
+		<inertial>
+				<origin rpy="0 0 0" xyz="0.000000 -0.184800 0.000000" />
+			 <mass value="0.00467" />
+			<inertia ixx="0.0000325" ixy="0" ixz="0" iyy="0.0000325" iyz="0" izz="0.0000325" />
+		</inertial>
+		<collision>
+				<origin rpy="-1.570796 0 0" xyz="0.000000 -0.184800 0.000000" />
+			<geometry>
+				<cylinder length="0.264000" radius="0.048400" />
+			</geometry>
+		</collision>
+	</link>
+	<joint name="left_hip" type="fixed" >
+		<parent link="root" />
+		<child link="left_hip" />
+				<origin rpy="0 0 0" xyz="0.000000 0.000000 -0.07470056" />
+	</joint>
+	<link name="left_knee" >
+		<inertial>
+				<origin rpy="0 0 0" xyz="0.000000 -0.176000 0.000000" />
+			 <mass value="0.00312" />
+			<inertia ixx="0.0000216" ixy="0" ixz="0" iyy="0.0000216" iyz="0" izz="0.0000216" />
+		</inertial>
+		<collision>
+				<origin rpy="-1.570796 0 0" xyz="0.000000 -0.176000 0.000000" />
+			<geometry>
+				<cylinder length="0.272800" radius="0.044000" />
+			</geometry>
+		</collision>
+	</link>
+	<joint name="left_knee" type="fixed" >
+		<parent link="left_hip" />
+		<child link="left_knee" />
+		<limit effort="1.0" lower="-3.14" upper="0." velocity="0.5"/>
+				<origin rpy="0 0 0" xyz="0.000000 -0.3709596 0.000000" />
+		<axis xyz="0.000000 0.000000 1.000000" />
+	</joint>
+	<link name="left_ankle" >
+		<inertial>
+				<origin rpy="0 0 0" xyz="0.039600 -0.019800 0.000000" />
+			 <mass value="0.00104" />
+			<inertia ixx="0.000007" ixy="0" ixz="0" iyy="0.000007" iyz="0" izz="0.000007" />
+		</inertial>
+		<collision>
+				<origin rpy="0 0 0" xyz="0.039600 -0.019800 0.000000" />
+			<geometry>
+				<box size="0.155760 0.048400 0.079200" />
+			</geometry>
+		</collision>
+	</link>
+	<joint name="left_ankle" type="fixed" >
+		<parent link="left_knee" />
+		<child link="left_ankle" />
+				<origin rpy="0 0 0" xyz="0.000000 -0.3606856 0.000000" />
+	</joint>
+	<link name="left_shoulder" >
+		<inertial>
+				<origin rpy="0 0 0" xyz="0.000000 -0.123200 0.000000" />
+			 <mass value="0.00156" />
+			<inertia ixx="0.000001" ixy="0" ixz="0" iyy="0.000001" iyz="0" izz="0.000001" />
+		</inertial>
+		<collision>
+				<origin rpy="-1.570796 0 0" xyz="0.000000 -0.123200 0.000000" />
+			<geometry>
+				<cylinder length="0.158400" radius="0.039600" />
+			</geometry>
+		</collision>
+	</link>
+	<joint name="left_shoulder" type="fixed" >
+		<parent link="chest" />
+		<child link="left_shoulder" />
+				<origin rpy="0 0 0" xyz="-0.021164 0.214280 -0.1611376" />
+	</joint>
+	<link name="left_elbow" >
+		<inertial>
+				<origin rpy="0 0 0" xyz="0.000000 -0.105600 0.000000" />
+			 <mass value="0.00104" />
+			<inertia ixx="0.000001" ixy="0" ixz="0" iyy="0.000001" iyz="0" izz="0.000001" />
+		</inertial>
+		<collision>
+				<origin rpy="-1.570796 0 0" xyz="0.000000 -0.105600 0.000000" />
+			<geometry>
+				<cylinder length="0.118800" radius="0.035200" />
+			</geometry>
+		</collision>
+	</link>
+	<joint name="left_elbow" type="fixed" >
+		<parent link="left_shoulder" />
+		<child link="left_elbow" />
+		<limit effort="1.0" lower="0" upper="3.14" velocity="0.5"/>
+				<origin rpy="0 0 0" xyz="0.000000 -0.24181344 0.000000" />
+		<axis xyz="0.000000 0.000000 1.000000" />
+	</joint>
+	<link name="left_wrist" >
+		<inertial>
+				<origin rpy="0 0 0" xyz="0.000000 0.000000 0.000000" />
+			 <mass value="0.00012" />
+			<inertia ixx="0.000001" ixy="0" ixz="0" iyy="0.000001" iyz="0" izz="0.000001" />
+		</inertial>
+		<collision>
+				<origin rpy="0 0 0" xyz="0.000000 0.000000 0.000000" />
+			<geometry>
+				<sphere radius="0.035200" />
+			</geometry>
+		</collision>
+	</link>
+	<joint name="left_wrist" type="fixed" >
+		<parent link="left_elbow" />
+		<child link="left_wrist" />
+				<origin rpy="0 0 0" xyz="0.000000 -0.22787232 0.000000" />
+	</joint>
+</robot>

@@ -9,6 +9,11 @@ currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentfram
 parentdir = os.path.dirname(currentdir)
 os.sys.path.insert(0, parentdir)
 
+def visualize_point_cloud(pcd):
+    pc_ply = o3d.geometry.PointCloud()
+    pc_ply.points = o3d.utility.Vector3dVector(pcd)
+    o3d.visualization.draw_geometries([pc_ply])
+
 # Function to generate surface vertices for a capsule shape
 def generate_capsule_vertices(radius, height, position, orientation, resolution=15):
     vertices = []
@@ -156,7 +161,7 @@ def generate_cylinder_vertices(radius, height, position, orientation, resolution
     return transformed_vertices
 
 # Function to get point cloud from collision shape vertices
-def get_point_cloud_from_collision_shapes(body_id):
+def get_point_cloud_from_collision_shapes(body_id, box_shape=None):
     point_cloud = []
     for link_id in range(-1, p.getNumJoints(body_id)):
         collision_shapes = p.getCollisionShapeData(body_id, link_id)
@@ -174,7 +179,10 @@ def get_point_cloud_from_collision_shapes(body_id):
                             vertices = p.getMeshData(body_id, link_id)[1]
                         elif data[2] == p.GEOM_BOX:
                             half_extents = np.array(data[3])
-                            vertices = generate_box_vertices(half_extents, position, orientation)
+                            if box_shape is not None:
+                                vertices = generate_box_vertices(box_shape, position, orientation)
+                            else:
+                                vertices = generate_box_vertices(half_extents, position, orientation)
                         elif data[2] == p.GEOM_SPHERE:
                             radius = data[3][0]
                             vertices = generate_sphere_vertices(radius, position, orientation)
@@ -200,6 +208,53 @@ def get_point_cloud_from_collision_shapes(body_id):
                         for vertex in vertices:
                             vertex_world = np.dot(link_world_transform, vertex) + np.array(link_world_pos)
                             point_cloud.append(vertex_world)
+
+                        # # visuaalize point cloud for debugging
+                        # visualize_point_cloud(point_cloud)
+    return point_cloud
+
+# Function to get point cloud from collision shape vertices from one specific link
+def get_point_cloud_from_collision_shapes_specific_link(body_id, link_id, resolution=15):
+    point_cloud = []
+    collision_shapes = p.getCollisionShapeData(body_id, link_id)
+    for data in collision_shapes:
+        if data[2] in [p.GEOM_MESH, p.GEOM_BOX, p.GEOM_SPHERE, p.GEOM_CYLINDER, p.GEOM_CAPSULE]:
+            position = data[5]
+            orientation = data[6]
+
+            if data[2] == p.GEOM_MESH:
+                mesh_file = data[4].decode("utf-8")
+                mesh_scale = data[3]
+                vertices = p.getMeshData(body_id, link_id)[1]
+            elif data[2] == p.GEOM_BOX:
+                half_extents = np.array(data[3])
+                vertices = generate_box_vertices(half_extents, position, orientation, resolution)
+            elif data[2] == p.GEOM_SPHERE:
+                radius = data[3][0]
+                vertices = generate_sphere_vertices(radius, position, orientation, resolution)
+            elif data[2] == p.GEOM_CYLINDER:
+                height = data[3][0]
+                radius = data[3][1]
+                vertices = generate_cylinder_vertices(radius, height, position, orientation, resolution)
+            elif data[2] == p.GEOM_CAPSULE:
+                height = data[3][0]
+                radius = data[3][1]
+                vertices = generate_capsule_vertices(radius, height, position, orientation, resolution)
+
+            if link_id == -1: 
+                link_state = p.getBasePositionAndOrientation(body_id)
+            else:
+                link_state = p.getLinkState(body_id, link_id)
+
+            link_world_pos = link_state[0]
+            link_world_ori = link_state[1]
+            link_world_transform = p.getMatrixFromQuaternion(link_world_ori)
+            link_world_transform = np.array(link_world_transform).reshape(3, 3)
+            
+            for vertex in vertices:
+                vertex_world = np.dot(link_world_transform, vertex) + np.array(link_world_pos)
+                point_cloud.append(vertex_world)
+
     return point_cloud
 
 # Function to get point cloud from visual shape vertices
@@ -247,47 +302,64 @@ def get_point_cloud_from_visual_shapes(body_id):
                         for vertex in vertices:
                             vertex_world = np.dot(link_world_transform, vertex) + np.array(link_world_pos)
                             point_cloud.append(vertex_world)
+
+                        # # visuaalize point cloud for debugging
+                        # visualize_point_cloud(point_cloud)
     return point_cloud
 
 # Function to get point cloud from humanoid specifying which link to separate
 def get_humanoid_point_cloud(body_id, link_id_to_separate=None):
     separate_point_cloud = []
     if link_id_to_separate is not None:
-        mesh_data = p.getCollisionShapeData(body_id, link_id_to_separate)
-        for data in mesh_data:
-            if data[2] in [p.GEOM_BOX, p.GEOM_SPHERE, p.GEOM_CAPSULE]:
-                position = data[5]
-                orientation = data[6]
-                
-                if data[2] == p.GEOM_BOX:
-                    half_extents = np.array(data[3])
-                    vertices = generate_box_vertices(half_extents, position, orientation, resolution=3)
-                elif data[2] == p.GEOM_SPHERE:
-                    radius = data[3][0]
-                    vertices = generate_sphere_vertices(radius, position, orientation, resolution=3)
-                elif data[2] == p.GEOM_CAPSULE:
-                    height = data[3][0]
-                    radius = data[3][1]
-                    vertices = generate_capsule_vertices(radius, height, position, orientation, resolution=3)
+        for link_id in link_id_to_separate:
+            mesh_data = p.getCollisionShapeData(body_id, link_id)
+            for data in mesh_data:
+                if data[2] in [p.GEOM_BOX, p.GEOM_SPHERE, p.GEOM_CAPSULE, p.GEOM_CYLINDER, p.GEOM_MESH]:
+                    position = data[5]
+                    orientation = data[6]
+                    
+                    if data[2] == p.GEOM_BOX:
+                        half_extents = np.array(data[3])
+                        vertices = generate_box_vertices(half_extents, position, orientation, resolution=8)
+                    elif data[2] == p.GEOM_SPHERE:
+                        radius = data[3][0]
+                        vertices = generate_sphere_vertices(radius, position, orientation, resolution=8)
+                    elif data[2] == p.GEOM_CAPSULE:
+                        height = data[3][0]
+                        radius = data[3][1]
+                        vertices = generate_capsule_vertices(radius, height, position, orientation, resolution=8)
+                    elif data[2] == p.GEOM_CYLINDER:
+                        height = data[3][0]
+                        radius = data[3][1]
+                        vertices = generate_cylinder_vertices(radius, height, position, orientation, resolution=8)
+                    elif data[2] == p.GEOM_MESH:
+                        mesh_file = data[4].decode("utf-8")
+                        mesh_scale = data[3]
+                        vertices = p.getMeshData(body_id, link_id)[1]
 
-                if link_id_to_separate == -1: 
-                    link_state = p.getBasePositionAndOrientation(body_id)
-                else:
-                    link_state = p.getLinkState(body_id, link_id_to_separate)
+                    if link_id == -1: 
+                        link_state = p.getBasePositionAndOrientation(body_id)
+                    else:
+                        link_state = p.getLinkState(body_id, link_id)
 
-                link_world_pos = link_state[0]
-                link_world_ori = link_state[1]
-                link_world_transform = p.getMatrixFromQuaternion(link_world_ori)
-                link_world_transform = np.array(link_world_transform).reshape(3, 3)
-                
-                for vertex in vertices:
-                    vertex_world = np.dot(link_world_transform, vertex) + np.array(link_world_pos)
-                    separate_point_cloud.append(vertex_world)
+                    link_world_pos = link_state[0]
+                    link_world_ori = link_state[1]
+                    link_world_transform = p.getMatrixFromQuaternion(link_world_ori)
+                    link_world_transform = np.array(link_world_transform).reshape(3, 3)
+                    
+                    for vertex in vertices:
+                        vertex_world = np.dot(link_world_transform, vertex) + np.array(link_world_pos)
+                        separate_point_cloud.append(vertex_world)
 
     point_cloud = []
     for link_id in range(-1, p.getNumJoints(body_id)):
         # skip link_id_to_separate
-        if link_id == link_id_to_separate:
+        if link_id_to_separate is not None:
+            if link_id in link_id_to_separate:
+                continue
+        
+        # skip link = right shoulder
+        if link_id == 6:
             continue
 
         # generate point cloud
@@ -296,7 +368,7 @@ def get_humanoid_point_cloud(body_id, link_id_to_separate=None):
             if shape[1] == link_id:
                 mesh_data = p.getCollisionShapeData(body_id, link_id)
                 for data in mesh_data:
-                    if data[2] in [p.GEOM_BOX, p.GEOM_SPHERE, p.GEOM_CAPSULE]:
+                    if data[2] in [p.GEOM_BOX, p.GEOM_SPHERE, p.GEOM_CAPSULE, p.GEOM_CYLINDER]:
                         position = data[5]
                         orientation = data[6]
                 
@@ -310,6 +382,10 @@ def get_humanoid_point_cloud(body_id, link_id_to_separate=None):
                             height = data[3][0]
                             radius = data[3][1]
                             vertices = generate_capsule_vertices(radius, height, position, orientation, resolution=8)
+                        elif data[2] == p.GEOM_CYLINDER:
+                            height = data[3][0]
+                            radius = data[3][1]
+                            vertices = generate_cylinder_vertices(radius, height, position, orientation, resolution=8)
 
                         if link_id == -1: 
                             link_state = p.getBasePositionAndOrientation(body_id)

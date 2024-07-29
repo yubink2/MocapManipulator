@@ -160,14 +160,14 @@
     
 	<link name="right_shoulder" >
 		<inertial>
-				<origin rpy = "0 0 0" xyz = "0.000000 -0.560000 0.000000" />
+				<origin rpy = "0 0 0" xyz = "0.000000 -0.460000 0.000000" />
 			 <mass value = "1.500000" />
 			<inertia ixx = "0.1" ixy = "0" ixz = "0" iyy = "0.1" iyz = "0" izz = "0.1" />
 		</inertial>
 		<collision>
-				<origin rpy = "-1.570796 0 0" xyz = "0.000000 -0.560000 0.000000" />
+				<origin rpy = "-1.570796 0 0" xyz = "0.000000 -0.460000 0.000000" />
 			<geometry>
-				<capsule length="0.720000" radius="0.180000"/>
+				<capsule length="0.620000" radius="0.180000"/>
 			</geometry>
 		</collision>
 	</link>
@@ -186,7 +186,7 @@
 		<collision>
 				<origin rpy = "-1.570796 0 0" xyz = "0.000000 -0.480000 0.000000" />
 			<geometry>
-				<capsule length="0.540000" radius="0.160000"/>
+				<capsule length="0.540000" radius="0.140000"/>
 			</geometry>
 		</collision>
 	</link>
@@ -207,7 +207,7 @@
 		<collision>
 				<origin rpy = "0 0 0" xyz = "0.000000 0.000000 0.000000" />
 			<geometry>
-				<sphere radius = "0.160000" />
+				<sphere radius = "0.140000" />
 			</geometry>
 		</collision>
 	</link>
